@@ -66,6 +66,36 @@ body {
   font-size: 0.95rem;
 }
 
+.admin__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.admin__auth {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.admin__auth-button {
+  padding: 0.55rem 1.2rem;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .admin__aside {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .admin__auth {
+    justify-content: flex-start;
+  }
+}
+
 .panel {
   background: var(--panel);
   border-radius: 24px;
@@ -191,6 +221,97 @@ body {
 .button--ghost {
   background: rgba(255, 255, 255, 0.55);
   color: var(--accent-strong);
+}
+
+.signin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(46, 33, 82, 0.38);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 1000;
+}
+
+.signin {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  padding: clamp(1.75rem, 1.4rem + 1vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.signin h2 {
+  margin: 0;
+  font-family: "Comfortaa", system-ui, sans-serif;
+  font-size: clamp(1.4rem, 1.1rem + 1vw, 1.75rem);
+}
+
+.signin__description {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.signin__message {
+  margin: 0;
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.signin__field {
+  margin: 0;
+}
+
+.signin__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.signin__buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.signin__remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.signin__remember input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent-strong);
+}
+
+@media (max-width: 520px) {
+  .signin__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.25rem;
+  }
+
+  .signin__buttons {
+    justify-content: flex-end;
+  }
 }
 
 .preview {
