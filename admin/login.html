@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Login · Figure Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Quicksand:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="login.css" />
+  </head>
+  <body>
+    <main class="login" aria-labelledby="login-title">
+      <section class="login-card">
+        <header class="login-card__header">
+          <h1 id="login-title">Sign in to the Figure Admin Panel</h1>
+          <p class="login-card__description">
+            Enter your administrator credentials to access the collection management tools.
+          </p>
+        </header>
+        <p class="login-card__message" id="login-message" role="alert" hidden></p>
+        <form class="login-form" id="login-form" autocomplete="off">
+          <label class="login-form__field">
+            <span class="login-form__label">Username</span>
+            <input
+              class="login-form__input"
+              id="login-username"
+              name="username"
+              autocomplete="username"
+              required
+            />
+          </label>
+          <label class="login-form__field">
+            <span class="login-form__label">Password</span>
+            <input
+              class="login-form__input"
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <button type="submit" class="login-form__submit" id="login-submit">Sign in</button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="login.js"></script>
+  </body>
+</html>
