@@ -1,8 +1,12 @@
-import { figures } from "./figures.js";
+import { figures, wishlist } from "./figures.js";
 
 const grid = document.getElementById("figure-grid");
+const wishlistGrid = document.getElementById("wishlist-grid");
 const sortSelect = document.getElementById("sort-select");
 const cardTemplate = document.getElementById("figure-card-template");
+const themeToggle = document.querySelector("[data-theme-toggle]");
+const themeToggleIcon = themeToggle?.querySelector("[data-theme-toggle-icon]");
+const themeToggleText = themeToggle?.querySelector("[data-theme-toggle-text]");
 
 const releaseValue = (figure) => figure.releaseDate ?? "";
 
@@ -21,69 +25,66 @@ const formatRelease = (value) => {
   return date.toLocaleString(undefined, { month: "long", year: "numeric" });
 };
 
-const renderFigures = (items) => {
-  grid.innerHTML = "";
-  const fragment = document.createDocumentFragment();
+const createCard = (item) => {
+  const card = cardTemplate.content.firstElementChild.cloneNode(true);
+  card.dataset.figureId = item.id;
 
-  items.forEach((item) => {
-    const card = cardTemplate.content.firstElementChild.cloneNode(true);
-    card.dataset.figureId = item.id;
-    const image = card.querySelector(".figure-card__image");
-    const caption = card.querySelector(".figure-card__caption");
+  const image = card.querySelector(".figure-card__image");
+  const caption = card.querySelector(".figure-card__caption");
+  const descriptionEl = card.querySelector(".figure-card__description");
+  const tagsList = card.querySelector(".figure-card__tags");
 
-    image.src = item.image;
-    image.alt = `${item.name} placeholder image`;
+  image.src = item.image;
+  const fallbackAlt = item.name ? `${item.name} figure` : "Anime figure";
+  image.alt = item.alt ?? fallbackAlt;
+
+  if (item.caption) {
     caption.textContent = item.caption;
+    caption.hidden = false;
+  } else {
+    caption.hidden = true;
+  }
 
-    card.querySelector(".figure-card__name").textContent = item.name;
-    card.querySelector(".figure-card__series").textContent = item.series;
-    card.querySelector(".figure-card__manufacturer").textContent = item.manufacturer;
-    card.querySelector(".figure-card__scale").textContent = item.scale;
-    card.querySelector(".figure-card__release").textContent = formatRelease(item.releaseDate);
-    const descriptionEl = card.querySelector(".figure-card__description");
-    if (item.description) {
-      descriptionEl.textContent = item.description;
-      descriptionEl.hidden = false;
-    } else {
-      descriptionEl.hidden = true;
-    }
+  card.querySelector(".figure-card__name").textContent = item.name;
+  card.querySelector(".figure-card__series").textContent = item.series;
+  card.querySelector(".figure-card__manufacturer").textContent = item.manufacturer;
+  card.querySelector(".figure-card__scale").textContent = item.scale;
+  card.querySelector(".figure-card__release").textContent = formatRelease(item.releaseDate);
 
-    const tagsList = card.querySelector(".figure-card__tags");
-    (item.tags ?? []).forEach((tag) => {
+  if (item.description) {
+    descriptionEl.textContent = item.description;
+    descriptionEl.hidden = false;
+  } else {
+    descriptionEl.hidden = true;
+  }
+
+  const tags = item.tags ?? [];
+  if (tags.length) {
+    tagsList.hidden = false;
+    tags.forEach((tag) => {
       const tagEl = document.createElement("li");
       tagEl.textContent = tag;
       tagsList.append(tagEl);
     });
+  } else {
+    tagsList.hidden = true;
+  }
 
-    fragment.append(card);
-  });
-
-  grid.append(fragment);
-
-  observer.disconnect();
-  document
-    .querySelectorAll(".figure-card article")
-    .forEach((card) => observer.observe(card));
+  return card;
 };
 
-const applySorting = () => {
-  const selected = sortSelect.value;
-  const sorter = sorters[selected] ?? sorters["release-desc"];
-  const sorted = [...figures].sort(sorter);
-  renderFigures(sorted);
+const renderList = (container, items) => {
+  if (!container) return;
+  container.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+
+  items.forEach((item) => {
+    fragment.append(createCard(item));
+  });
+
+  container.append(fragment);
 };
 
-sortSelect.addEventListener("change", applySorting);
-
-document.querySelectorAll('[data-scroll-to]').forEach((button) => {
-  button.addEventListener("click", () => {
-    const targetId = button.getAttribute("data-scroll-to");
-    const target = document.getElementById(targetId);
-    target?.scrollIntoView({ behavior: "smooth" });
-  });
-});
-
-// Intersection Observer for card animations
 const observer = new IntersectionObserver(
   (entries) => {
     entries.forEach((entry) => {
@@ -95,7 +96,111 @@ const observer = new IntersectionObserver(
   { threshold: 0.2 }
 );
 
+const refreshCardObservations = () => {
+  observer.disconnect();
+  document
+    .querySelectorAll(".figure-card article")
+    .forEach((card) => observer.observe(card));
+};
+
+const applySorting = () => {
+  const selected = sortSelect?.value ?? "release-desc";
+  const sorter = sorters[selected] ?? sorters["release-desc"];
+
+  const sortedFigures = [...figures].sort(sorter);
+  const sortedWishlist = [...wishlist].sort(sorter);
+
+  renderList(grid, sortedFigures);
+  renderList(wishlistGrid, sortedWishlist);
+  refreshCardObservations();
+};
+
+sortSelect?.addEventListener("change", applySorting);
+
+document
+  .querySelectorAll("[data-scroll-to]")
+  .forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-scroll-to");
+      const target = document.getElementById(targetId);
+      target?.scrollIntoView({ behavior: "smooth" });
+    });
+  });
+
+const THEME_STORAGE_KEY = "kawaii-theme-preference";
+const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+let storedTheme = null;
+let currentTheme = "light";
+
+const updateToggleLabels = (theme) => {
+  if (!themeToggle) return;
+  const nextTheme = theme === "dark" ? "light" : "dark";
+  const actionLabel = `Switch to ${nextTheme} mode`;
+
+  themeToggle.setAttribute("aria-label", actionLabel);
+  themeToggle.setAttribute(
+    "title",
+    `${actionLabel} (right-click to follow system theme)`
+  );
+  themeToggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+
+  if (themeToggleIcon) {
+    themeToggleIcon.textContent = theme === "dark" ? "☀️" : "🌙";
+  }
+
+  if (themeToggleText) {
+    themeToggleText.textContent = `${nextTheme[0].toUpperCase()}${nextTheme.slice(1)} mode`;
+  }
+};
+
+const setTheme = (theme, { persist = false } = {}) => {
+  currentTheme = theme;
+
+  if (theme === "dark") {
+    document.documentElement.dataset.theme = "dark";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+
+  updateToggleLabels(theme);
+
+  if (persist) {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    storedTheme = theme;
+  }
+};
+
+const loadThemePreference = () => {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === "light" || stored === "dark") {
+    storedTheme = stored;
+    setTheme(storedTheme);
+    return;
+  }
+
+  storedTheme = null;
+  setTheme(prefersDarkScheme.matches ? "dark" : "light");
+};
+
+prefersDarkScheme.addEventListener("change", (event) => {
+  if (storedTheme === "light" || storedTheme === "dark") return;
+  setTheme(event.matches ? "dark" : "light");
+});
+
+themeToggle?.addEventListener("click", () => {
+  const nextTheme = currentTheme === "dark" ? "light" : "dark";
+  setTheme(nextTheme, { persist: true });
+});
+
+themeToggle?.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  storedTheme = null;
+  setTheme(prefersDarkScheme.matches ? "dark" : "light");
+});
+
 const init = () => {
+  loadThemePreference();
   applySorting();
 };
 

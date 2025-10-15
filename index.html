@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="darkreader-lock" />
   <title>Kawaii Figure Vault</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,6 +15,16 @@
 </head>
 <body>
   <div class="sparkle-layer" aria-hidden="true"></div>
+  <button
+    class="theme-toggle"
+    type="button"
+    data-theme-toggle
+    aria-label="Toggle dark mode"
+    title="Toggle dark mode (right-click to follow system theme)"
+  >
+    <span class="theme-toggle__icon" aria-hidden="true" data-theme-toggle-icon>🌙</span>
+    <span class="theme-toggle__text" data-theme-toggle-text>Dark mode</span>
+  </button>
   <header class="hero">
     <div class="hero__content">
       <span class="hero__tag">☆彡 welcome to the collection ☆彡</span>
@@ -21,9 +32,18 @@
       <p class="hero__subtitle">
         A catalog of all the anime figures I own! These are placeholders for now.
       </p>
-      <button class="hero__cta" type="button" data-scroll-to="collection">
-        Browse the Collection
-      </button>
+      <div class="hero__actions">
+        <button class="hero__cta" type="button" data-scroll-to="collection">
+          Browse the Collection
+        </button>
+        <button
+          class="hero__cta hero__cta--secondary"
+          type="button"
+          data-scroll-to="wishlist"
+        >
+          View the Wishlist
+        </button>
+      </div>
     </div>
     <div class="hero__mascot" role="presentation" aria-hidden="true">
       <div class="mascot__orb"></div>
@@ -58,12 +78,38 @@
       <ul class="figure-grid" id="figure-grid"></ul>
     </section>
 
+    <section
+      class="collection wishlist"
+      id="wishlist"
+      aria-label="Figures I want to collect"
+    >
+      <header class="collection__header">
+        <h2>Figures I Want</h2>
+        <p>
+          Keep track of future grails by editing the <code>wishlist</code> entries in
+          <code>figures.js</code>. They'll display automatically next to your current
+          collection.
+        </p>
+      </header>
+
+      <ul class="figure-grid" id="wishlist-grid"></ul>
+    </section>
+
     <section class="notes" aria-label="Customization tips">
       <h2>How to Customize</h2>
       <ol>
-        <li>Open <code>figures.js</code> and update each placeholder figure with your real data.</li>
+        <li>
+          Open <code>figures.js</code> and update each placeholder figure with your real data.
+        </li>
         <li>Add new figures by copying an existing entry. The list renders itself automatically!</li>
-        <li>Drop figure images in an <code>assets/</code> folder (or link remote images) and update the <code>image</code> URL.</li>
+        <li>
+          Add wish-list targets to the exported <code>wishlist</code> array so they appear in the
+          new “Figures I Want” gallery.
+        </li>
+        <li>
+          Drop figure images in an <code>assets/</code> folder (or link remote images) and update
+          the <code>image</code> URL.
+        </li>
         <li>Want more sparkle? Tweak colors or animations inside <code>styles.css</code>.</li>
       </ol>
     </section>
