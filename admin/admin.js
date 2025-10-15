@@ -10,6 +10,7 @@ const downloadButton = document.getElementById("download-json");
 const sessionLog = document.getElementById("session-log");
 const preview = document.getElementById("entry-preview");
 const generateSlugButton = document.getElementById("generate-slug");
+const manager = document.getElementById("collection-manager");
 
 const field = (id) => document.getElementById(id);
 
@@ -34,6 +35,7 @@ const state = {
   collection: { owned: [], wishlist: [] },
   loaded: false,
   additions: [],
+  editing: null,
 };
 
 const escapeHtml = (value) =>
@@ -57,6 +59,44 @@ const slugify = ({ name, mfcId }) => {
   if (mfcId) return `mfc-${mfcId}`;
   return `figure-${Date.now()}`;
 };
+
+const parseMfcItemId = (value) => {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const urlMatch = trimmed.match(/item\/(\d+)/i);
+  if (urlMatch) return urlMatch[1];
+  const digits = trimmed.replace(/\D+/g, "");
+  return digits || null;
+};
+
+const identityMatches = (entry, target) => {
+  if (!entry || !target) return false;
+  if (entry.slug && target.slug && entry.slug === target.slug) return true;
+  if (
+    entry.mfcId !== undefined &&
+    entry.mfcId !== null &&
+    target.mfcId !== undefined &&
+    target.mfcId !== null &&
+    Number(entry.mfcId) === Number(target.mfcId)
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const getEntryLabel = (entry) => {
+  if (!entry) return "Untitled figure";
+  if (entry.name && entry.name.trim()) return entry.name.trim();
+  if (entry.slug && entry.slug.trim()) return entry.slug.trim();
+  if (entry.mfcId) return `MFC ${entry.mfcId}`;
+  return "Untitled figure";
+};
+
+const sortEntries = (entries = []) =>
+  [...entries].sort((a, b) => getEntryLabel(a).localeCompare(getEntryLabel(b)));
+
+const formatListName = (list) => (list === "wishlist" ? "Wishlist" : "Owned");
 
 const normalizeTags = (value) => {
   if (!value) return [];
@@ -162,17 +202,27 @@ const renderSessionLog = () => {
 
   const markup = state.additions
     .map((item) => {
+      const actionLabel =
+        item.action === "updated"
+          ? "Updated"
+          : item.action === "moved"
+          ? "Moved"
+          : "Added";
+      const listLabel = formatListName(item.list);
       const tags = item.entry.tags?.length
         ? `<span>Tags: ${escapeHtml(item.entry.tags.join(", "))}</span>`
         : "";
       const mfc = item.entry.mfcId
         ? `<span>MFC: <code>${escapeHtml(String(item.entry.mfcId))}</code></span>`
         : "";
+      const from = item.from ? `<span>From: ${escapeHtml(formatListName(item.from))}</span>` : "";
       return `
         <article class="session-entry">
           <h3>${escapeHtml(item.entry.name)}</h3>
           <div class="session-entry__meta">
-            <span>List: ${escapeHtml(item.list)}</span>
+            <span>Action: ${escapeHtml(actionLabel)}</span>
+            <span>List: ${escapeHtml(listLabel)}</span>
+            ${from}
             ${mfc}
             ${tags}
           </div>
@@ -183,6 +233,101 @@ const renderSessionLog = () => {
     .join("\n");
 
   sessionLog.innerHTML = markup;
+};
+
+const renderManagerSection = (title, listKey, items = []) => {
+  const safeTitle = escapeHtml(title);
+  if (!Array.isArray(items) || !items.length) {
+    return `
+      <section class="manager__section">
+        <h3>${safeTitle}</h3>
+        <p class="manager__empty">No figures yet.</p>
+      </section>
+    `;
+  }
+
+  const sorted = sortEntries(items);
+  const listItems = sorted
+    .map((entry) => {
+      const isActive =
+        state.editing && state.editing.list === listKey && identityMatches(entry, state.editing);
+      const metaParts = [];
+      if (entry.slug) {
+        metaParts.push(`Slug: <code>${escapeHtml(entry.slug)}</code>`);
+      }
+      if (entry.mfcId) {
+        metaParts.push(`MFC: <code>${escapeHtml(String(entry.mfcId))}</code>`);
+      }
+      if (entry.series) {
+        metaParts.push(escapeHtml(entry.series));
+      }
+      const meta = metaParts.length
+        ? `<div class="manager__meta">${metaParts.join(" · ")}</div>`
+        : "";
+      return `
+        <li>
+          <button
+            type="button"
+            class="manager__item${isActive ? " manager__item--active" : ""}"
+            data-action="edit-entry"
+            data-list="${escapeHtml(listKey)}"
+            data-slug="${entry.slug ? escapeHtml(entry.slug) : ""}"
+          >
+            <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
+            ${meta}
+          </button>
+        </li>
+      `;
+    })
+    .join("\n");
+
+  return `
+    <section class="manager__section">
+      <h3>${safeTitle}</h3>
+      <ul class="manager__list">
+        ${listItems}
+      </ul>
+    </section>
+  `;
+};
+
+const renderManager = () => {
+  if (!manager) return;
+  if (!state.loaded) {
+    manager.innerHTML = '<p class="manager__placeholder">Loading collection…</p>';
+    return;
+  }
+
+  let editingEntry = null;
+  if (state.editing && state.editing.list) {
+    editingEntry = state.collection[state.editing.list]?.find((item) =>
+      identityMatches(item, state.editing)
+    );
+    if (!editingEntry) {
+      state.editing = null;
+    }
+  }
+  const editingLabel = editingEntry ? getEntryLabel(editingEntry) : null;
+
+  const statusMarkup = editingLabel
+    ? `
+        <div class="manager__status">
+          <span>
+            Currently editing <strong>${escapeHtml(editingLabel)}</strong>
+            <span>(${escapeHtml(formatListName(state.editing.list))})</span>
+          </span>
+          <button type="button" class="manager__clear" data-action="clear-editing">Stop editing</button>
+        </div>
+      `
+    : '<p class="manager__placeholder">Select a figure to load it into the form.</p>';
+
+  manager.innerHTML = `
+    ${statusMarkup}
+    <div class="manager__lists">
+      ${renderManagerSection("Owned figures", "owned", state.collection.owned)}
+      ${renderManagerSection("Wishlist", "wishlist", state.collection.wishlist)}
+    </div>
+  `;
 };
 
 const ensureSlug = () => {
@@ -196,12 +341,16 @@ const ensureSlug = () => {
   return generated;
 };
 
-const resetForm = () => {
+const resetForm = ({ keepLookup = false } = {}) => {
   figureForm.reset();
-  lookupInput.value = "";
-  lookupFeedback.textContent = "";
+  if (!keepLookup) {
+    lookupInput.value = "";
+    lookupFeedback.textContent = "";
+  }
   fields.list.value = "owned";
+  state.editing = null;
   renderPreview();
+  renderManager();
 };
 
 const applyEntryToForm = (entry = {}) => {
@@ -244,31 +393,62 @@ const fetchCollection = async () => {
     };
     state.loaded = true;
     updateStatus();
+    renderManager();
   } catch (error) {
     state.loaded = false;
     collectionStatus.textContent = error.message;
+    if (manager) {
+      manager.innerHTML = `<p class="manager__placeholder">${escapeHtml(error.message)}</p>`;
+    }
   }
 };
 
-const mergeEntryIntoCollection = (list, entry) => {
-  if (!state.loaded) return false;
+const mergeEntryIntoCollection = (list, entry, previous = null) => {
+  if (!state.loaded) return { success: false };
   const target = state.collection[list];
-  if (!Array.isArray(target)) return false;
+  if (!Array.isArray(target)) return { success: false };
 
-  const index = target.findIndex(
-    (item) => item.slug === entry.slug || (entry.mfcId && item.mfcId === entry.mfcId)
-  );
+  const matchesNew = (item) =>
+    (entry.slug && item.slug === entry.slug) ||
+    (entry.mfcId && item.mfcId && Number(item.mfcId) === Number(entry.mfcId));
 
+  let index = target.findIndex(matchesNew);
+
+  if (index === -1 && previous && previous.list === list) {
+    index = target.findIndex((item) => identityMatches(item, previous));
+  }
+
+  let action = index >= 0 ? "updated" : "added";
   if (index >= 0) {
     target.splice(index, 1, { ...target[index], ...entry });
   } else {
     target.push(entry);
+    index = target.length - 1;
   }
 
-  state.additions.unshift({ list, entry });
+  let from = null;
+  if (previous && previous.list) {
+    const source = state.collection[previous.list];
+    if (Array.isArray(source)) {
+      const removeIndex = source.findIndex((item, idx) => {
+        if (previous.list === list && idx === index) return false;
+        return identityMatches(item, previous);
+      });
+      if (removeIndex >= 0) {
+        source.splice(removeIndex, 1);
+        if (previous.list !== list) {
+          from = previous.list;
+          action = "moved";
+        }
+      }
+    }
+  }
+
+  state.additions.unshift({ list, entry, action, from });
+  state.additions = state.additions.slice(0, 20);
   updateStatus();
   renderSessionLog();
-  return true;
+  return { success: true, action, from };
 };
 
 const handleCopyEntry = async () => {
@@ -305,8 +485,14 @@ const handleDownload = () => {
 
 const handleLookup = async (event) => {
   event.preventDefault();
-  const itemId = lookupInput.value.trim();
-  if (!itemId) return;
+  const rawItemId = lookupInput.value;
+  const itemId = parseMfcItemId(rawItemId);
+  if (!itemId) {
+    lookupFeedback.textContent = "Enter a valid MyFigureCollection item number or URL.";
+    return;
+  }
+
+  lookupInput.value = itemId;
 
   lookupFeedback.textContent = "Fetching item details…";
 
@@ -363,9 +549,60 @@ const handleFormSubmit = (event) => {
     return;
   }
 
-  mergeEntryIntoCollection(formData.list, formData.entry);
-  lookupFeedback.textContent = `Saved to ${formData.list}. Download the JSON when you're ready.`;
+  const result = mergeEntryIntoCollection(formData.list, formData.entry, state.editing);
+  if (!result.success) {
+    lookupFeedback.textContent = "Unable to update the collection. Please try again.";
+    return;
+  }
+
+  state.editing = {
+    list: formData.list,
+    slug: formData.entry.slug,
+    mfcId:
+      formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
+        ? formData.entry.mfcId
+        : null,
+  };
+
+  renderManager();
+
+  let message = `Saved to ${formatListName(formData.list)}. Download the JSON when you're ready.`;
+  if (result.action === "updated") {
+    message = `Updated ${formData.entry.name} in ${formatListName(formData.list)}.`;
+  } else if (result.action === "moved") {
+    const fromLabel = result.from ? formatListName(result.from) : "previous list";
+    message = `Moved ${formData.entry.name} from ${fromLabel} to ${formatListName(
+      formData.list
+    )}.`;
+  }
+
+  lookupFeedback.textContent = message;
   renderPreview();
+};
+
+const startEditingEntry = (list, slug) => {
+  if (!list || !slug) return;
+  const entries = state.collection[list];
+  if (!Array.isArray(entries)) return;
+  const entry = entries.find((item) => item.slug === slug);
+  if (!entry) return;
+
+  figureForm.reset();
+  fields.list.value = list;
+  applyEntryToForm({ ...entry, list });
+  state.editing = {
+    list,
+    slug: entry.slug,
+    mfcId: entry.mfcId ?? null,
+  };
+
+  lookupInput.value = entry.mfcId ? String(entry.mfcId) : "";
+
+  lookupFeedback.textContent = `Editing “${getEntryLabel(entry)}” from ${formatListName(list)}.`;
+  renderManager();
+  if (fields.name && typeof fields.name.focus === "function") {
+    fields.name.focus();
+  }
 };
 
 lookupForm.addEventListener("submit", handleLookup);
@@ -378,6 +615,7 @@ figureForm.addEventListener("change", renderPreview);
 figureForm.addEventListener("submit", handleFormSubmit);
 resetFormButton.addEventListener("click", () => {
   resetForm();
+  lookupFeedback.textContent = "Form reset. Start a new entry above.";
 });
 copyEntryButton.addEventListener("click", handleCopyEntry);
 downloadButton.addEventListener("click", handleDownload);
@@ -389,5 +627,27 @@ generateSlugButton.addEventListener("click", () => {
   renderPreview();
 });
 
-fetchCollection().then(renderPreview);
+if (manager) {
+  manager.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
+    if (action === "edit-entry") {
+      const list = button.dataset.list;
+      const slug = button.dataset.slug;
+      if (list && slug) {
+        startEditingEntry(list, slug);
+      }
+    } else if (action === "clear-editing") {
+      state.editing = null;
+      renderManager();
+      lookupFeedback.textContent = "Editing cleared. Select a figure to edit or fill the form to add a new one.";
+    }
+  });
+}
+
+fetchCollection().then(() => {
+  renderPreview();
+  renderManager();
+});
 renderSessionLog();

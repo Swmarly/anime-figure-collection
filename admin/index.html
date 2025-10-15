@@ -44,7 +44,6 @@
               id="mfc-item-id"
               name="mfc-item-id"
               inputmode="numeric"
-              pattern="\\d*"
               placeholder="e.g. 3531981"
               required
             />
@@ -148,6 +147,20 @@
             <button type="submit" class="button button--primary">Add to collection</button>
           </div>
         </form>
+      </section>
+
+      <section class="panel" aria-labelledby="manager-heading">
+        <div class="panel__header">
+          <h2 id="manager-heading">Collection manager</h2>
+          <p>
+            Browse existing entries to edit their details or move them between your owned list and
+            wishlist. Selecting a figure fills the form above so you can make changes and save them
+            back to the collection.
+          </p>
+        </div>
+        <div class="manager" id="collection-manager" aria-live="polite">
+          <p class="manager__placeholder">Loading collection…</p>
+        </div>
       </section>
 
       <section class="panel" aria-labelledby="preview-heading">
