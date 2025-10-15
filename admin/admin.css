@@ -226,6 +226,115 @@ body {
   color: rgba(46, 33, 82, 0.65);
 }
 
+.manager {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.manager__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.manager__status strong {
+  color: var(--text);
+}
+
+.manager__lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.manager__section {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border-radius: 18px;
+  border: 1px solid rgba(209, 195, 255, 0.55);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.manager__section h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.manager__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.manager__item {
+  width: 100%;
+  border: 1px solid rgba(209, 195, 255, 0.7);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  display: grid;
+  gap: 0.35rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.manager__item:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-solid);
+  box-shadow: 0 10px 24px rgba(138, 116, 255, 0.18);
+}
+
+.manager__item--active {
+  border-color: var(--accent-solid);
+  box-shadow: 0 12px 28px rgba(138, 116, 255, 0.24);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.manager__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.manager__meta {
+  font-size: 0.8rem;
+  color: rgba(46, 33, 82, 0.6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.manager__placeholder,
+.manager__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.manager__clear {
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(209, 195, 255, 0.7);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--accent-strong);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.manager__clear:hover {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 18px rgba(138, 116, 255, 0.18);
+}
+
 @media (max-width: 720px) {
   body {
     padding: 2rem 1.25rem 3rem;
