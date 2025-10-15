@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kawaii Figure Vault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Quicksand:wght@400;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="sparkle-layer" aria-hidden="true"></div>
+  <header class="hero">
+    <div class="hero__content">
+      <span class="hero__tag">☆彡 welcome to the collection ☆彡</span>
+      <h1 class="hero__title">My Magical Anime Figure Gallery</h1>
+      <p class="hero__subtitle">
+        A dreamy catalog of all the figures I adore! These are placeholders for now—swap them with your own lovely lineup anytime.
+      </p>
+      <button class="hero__cta" type="button" data-scroll-to="collection">
+        Browse the Treasure Chest
+      </button>
+    </div>
+    <div class="hero__mascot" role="presentation" aria-hidden="true">
+      <div class="mascot__orb"></div>
+      <div class="mascot__ring"></div>
+      <div class="mascot__sparkle sparkle--one"></div>
+      <div class="mascot__sparkle sparkle--two"></div>
+      <div class="mascot__sparkle sparkle--three"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="collection" id="collection" aria-label="Anime figure collection">
+      <header class="collection__header">
+        <h2>Figure Showcase</h2>
+        <p>
+          Edit <code>figures.js</code> to update names, series, release details, and photos. Add new figures by copying the example entry—no extra HTML needed!
+        </p>
+      </header>
+
+      <div class="collection__filters" role="region" aria-label="Collection filters">
+        <label class="filter">
+          <span class="filter__label">Sort by</span>
+          <select id="sort-select" aria-label="Sort figures">
+            <option value="release-desc">Newest releases</option>
+            <option value="release-asc">Oldest releases</option>
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+          </select>
+        </label>
+      </div>
+
+      <ul class="figure-grid" id="figure-grid"></ul>
+    </section>
+
+    <section class="notes" aria-label="Customization tips">
+      <h2>How to Customize</h2>
+      <ol>
+        <li>Open <code>figures.js</code> and update each placeholder figure with your real data.</li>
+        <li>Add new figures by copying an existing entry. The list renders itself automatically!</li>
+        <li>Drop figure images in an <code>assets/</code> folder (or link remote images) and update the <code>image</code> URL.</li>
+        <li>Want more sparkle? Tweak colors or animations inside <code>styles.css</code>.</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Made with ♡ and infinite kawaii energy.</p>
+  </footer>
+
+  <template id="figure-card-template">
+    <li class="figure-card">
+      <article>
+        <figure class="figure-card__image-frame">
+          <img class="figure-card__image" alt="" loading="lazy" />
+          <figcaption class="figure-card__caption"></figcaption>
+        </figure>
+        <div class="figure-card__info">
+          <h3 class="figure-card__name"></h3>
+          <p class="figure-card__series"></p>
+          <dl class="figure-card__details">
+            <div>
+              <dt>Manufacturer</dt>
+              <dd class="figure-card__manufacturer"></dd>
+            </div>
+            <div>
+              <dt>Scale</dt>
+              <dd class="figure-card__scale"></dd>
+            </div>
+            <div>
+              <dt>Release</dt>
+              <dd class="figure-card__release"></dd>
+            </div>
+          </dl>
+          <p class="figure-card__description"></p>
+        </div>
+        <ul class="figure-card__tags" aria-label="Figure tags"></ul>
+      </article>
+    </li>
+  </template>
+
+  <script src="figures.js"></script>
+  <script src="script.js" type="module"></script>
+</body>
+</html>
