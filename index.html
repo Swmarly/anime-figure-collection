@@ -99,12 +99,16 @@
       <h2>How to Customize</h2>
       <ol>
         <li>
-          Open <code>figures.js</code> and update each placeholder figure with your real data.
+          Sign in to <code>/admin</code> to import figures from MyFigureCollection or add them
+          manually, then download the refreshed <code>collection.json</code> file.
         </li>
-        <li>Add new figures by copying an existing entry. The list renders itself automatically!</li>
         <li>
-          Add wish-list targets to the exported <code>wishlist</code> array so they appear in the
-          new “Figures I Want” gallery.
+          Run <code>node scripts/generate-figures.mjs</code> after updating the collection to
+          regenerate <code>figures.js</code> for the public site.
+        </li>
+        <li>
+          Need a quick tweak? Open <code>figures.js</code> directly to fine-tune names, captions, or
+          tags.
         </li>
         <li>
           Drop figure images in an <code>assets/</code> folder (or link remote images) and update
