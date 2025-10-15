@@ -9,14 +9,16 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 - Smooth scroll navigation and scroll-in animations for a polished experience.
 
 ## 🧸 Getting Started
-1. **Preview locally**: open `index.html` in your browser. No build step required.
+1. **Preview locally**: open `public/index.html` in your browser. No build step required.
 2. **Customize the figures**:
-   - Open [`figures.js`](./figures.js).
+   - Open [`figures.js`](./public/figures.js).
    - Replace the placeholder entries with your real figures.
    - Copy any object in the array to add a new figure.
    - Update the `image` field with an `assets/` path or remote URL.
-3. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
-4. **Deploy on Cloudflare Pages**: point your Pages project at this repository. The default build command is none, and the output directory is the repo root.
+3. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./public/styles.css).
+4. **Deploy on Cloudflare Pages or Workers**:
+   - **Cloudflare Pages**: point your project at this repository. Set the build command to none and the output directory to `public/`.
+   - **Cloudflare Workers**: run `npx wrangler deploy`. The included `wrangler.toml` serves the `public/` directory through a minimal Worker and automatically falls back to `index.html` for unknown routes.
 
 ## 🖼 Figure Object Reference
 Each figure entry in `figures.js` can include the following fields:
