@@ -11,6 +11,15 @@ const sessionLog = document.getElementById("session-log");
 const preview = document.getElementById("entry-preview");
 const generateSlugButton = document.getElementById("generate-slug");
 const manager = document.getElementById("collection-manager");
+const signInOverlay = document.getElementById("signin-overlay");
+const signInForm = document.getElementById("signin-form");
+const signInUsername = document.getElementById("signin-username");
+const signInPassword = document.getElementById("signin-password");
+const signInRemember = document.getElementById("signin-remember");
+const signInCancel = document.getElementById("signin-cancel");
+const signInMessage = document.getElementById("signin-message");
+const signInButton = document.getElementById("sign-in-button");
+const signOutButton = document.getElementById("sign-out-button");
 
 const field = (id) => document.getElementById(id);
 
@@ -37,6 +46,178 @@ const state = {
   additions: [],
   editing: null,
 };
+
+const AUTH_STORAGE_KEY = "figure-admin-auth";
+const SIGN_IN_PROMPT = "Sign in to fetch details from MyFigureCollection.";
+const UNAUTHORIZED_ERROR_CODE = "unauthorized";
+const storageTargets = [
+  { name: "sessionStorage", persistent: false },
+  { name: "localStorage", persistent: true },
+];
+
+const getStorage = (name) => {
+  if (typeof window === "undefined") return null;
+  try {
+    const storage = window[name];
+    if (!storage || typeof storage.getItem !== "function") {
+      return null;
+    }
+    return storage;
+  } catch {
+    return null;
+  }
+};
+
+const readStoredAuth = () => {
+  for (const target of storageTargets) {
+    const storage = getStorage(target.name);
+    if (!storage) continue;
+    try {
+      const raw = storage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.token === "string" && parsed.token.startsWith("Basic ")) {
+        return { token: parsed.token, persistent: target.persistent };
+      }
+    } catch {
+      try {
+        storage.removeItem(AUTH_STORAGE_KEY);
+      } catch {
+        // ignore cleanup failures
+      }
+    }
+  }
+  return null;
+};
+
+let authToken = null;
+
+const setSignInMessage = (message = "") => {
+  if (!signInMessage) return;
+  if (message) {
+    signInMessage.textContent = message;
+    signInMessage.hidden = false;
+  } else {
+    signInMessage.textContent = "";
+    signInMessage.hidden = true;
+  }
+};
+
+function updateAuthControls() {
+  if (signInButton) {
+    signInButton.hidden = Boolean(authToken);
+  }
+  if (signOutButton) {
+    signOutButton.hidden = !Boolean(authToken);
+  }
+}
+
+function showSignIn(message) {
+  if (!signInOverlay) return;
+  signInOverlay.hidden = false;
+  setSignInMessage(message || SIGN_IN_PROMPT);
+  const focusTarget = signInUsername || signInOverlay.querySelector("input");
+  if (focusTarget && typeof focusTarget.focus === "function") {
+    setTimeout(() => focusTarget.focus(), 0);
+  }
+}
+
+function hideSignIn() {
+  if (!signInOverlay) return;
+  signInOverlay.hidden = true;
+  setSignInMessage("");
+  if (signInForm && typeof signInForm.reset === "function") {
+    signInForm.reset();
+  }
+}
+
+const saveAuthToken = (token, persistent) => {
+  authToken = token;
+  for (const target of storageTargets) {
+    const storage = getStorage(target.name);
+    if (!storage) continue;
+    try {
+      if (target.persistent === persistent) {
+        storage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token }));
+      } else {
+        storage.removeItem(AUTH_STORAGE_KEY);
+      }
+    } catch (error) {
+      if (target.persistent === persistent) {
+        console.warn("Unable to persist admin credentials", error);
+      }
+    }
+  }
+  updateAuthControls();
+};
+
+const clearAuthToken = () => {
+  authToken = null;
+  for (const target of storageTargets) {
+    const storage = getStorage(target.name);
+    if (!storage) continue;
+    try {
+      storage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
+  updateAuthControls();
+};
+
+const encodeBasicCredentials = (username, password) => {
+  const value = `${username}:${password}`;
+  try {
+    return btoa(value);
+  } catch {
+    if (typeof TextEncoder === "function") {
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(value);
+      let binary = "";
+      bytes.forEach((byte) => {
+        binary += String.fromCharCode(byte);
+      });
+      return btoa(binary);
+    }
+    throw new Error("Unable to encode credentials.");
+  }
+};
+
+const createUnauthorizedError = (message) => {
+  const error = new Error(message);
+  error.code = UNAUTHORIZED_ERROR_CODE;
+  return error;
+};
+
+const authorizedFetch = async (input, init = {}) => {
+  if (!authToken) {
+    showSignIn();
+    throw createUnauthorizedError(SIGN_IN_PROMPT);
+  }
+
+  const options = {
+    ...init,
+    headers: new Headers(init && init.headers ? init.headers : undefined),
+  };
+
+  options.headers.set("Authorization", authToken);
+
+  const response = await fetch(input, options);
+
+  if (response.status === 401) {
+    clearAuthToken();
+    showSignIn("Your credentials were rejected. Please sign in again.");
+    throw createUnauthorizedError(SIGN_IN_PROMPT);
+  }
+
+  return response;
+};
+
+const storedAuth = readStoredAuth();
+if (storedAuth) {
+  authToken = storedAuth.token;
+}
+updateAuthControls();
 
 const escapeHtml = (value) =>
   value
@@ -497,7 +678,7 @@ const handleLookup = async (event) => {
   lookupFeedback.textContent = "Fetching item details…";
 
   try {
-    const response = await fetch(`/api/mfc?item=${encodeURIComponent(itemId)}`, {
+    const response = await authorizedFetch(`/api/mfc?item=${encodeURIComponent(itemId)}`, {
       headers: { Accept: "application/json" },
     });
 
@@ -568,6 +749,10 @@ const handleLookup = async (event) => {
     lookupFeedback.textContent = "Details imported. Review and adjust below.";
     renderPreview();
   } catch (error) {
+    if (error?.code === UNAUTHORIZED_ERROR_CODE) {
+      lookupFeedback.textContent = error.message || SIGN_IN_PROMPT;
+      return;
+    }
     lookupFeedback.textContent =
       error.message || "Unable to fetch details. Please add the figure manually.";
   }
@@ -665,6 +850,74 @@ generateSlugButton.addEventListener("click", () => {
   renderPreview();
 });
 
+if (signInButton) {
+  signInButton.addEventListener("click", () => {
+    showSignIn();
+  });
+}
+
+if (signOutButton) {
+  signOutButton.addEventListener("click", () => {
+    clearAuthToken();
+    showSignIn("Signed out. Sign in again to use the MyFigureCollection lookup.");
+    if (lookupFeedback) {
+      lookupFeedback.textContent = SIGN_IN_PROMPT;
+    }
+  });
+}
+
+if (signInCancel) {
+  signInCancel.addEventListener("click", () => {
+    hideSignIn();
+    if (lookupFeedback) {
+      lookupFeedback.textContent =
+        "You can still manage your collection without signing in.";
+    }
+  });
+}
+
+if (signInForm) {
+  signInForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const username = signInUsername?.value?.trim() || "";
+    const password = signInPassword?.value || "";
+    if (!username || !password) {
+      setSignInMessage("Enter both your username and password.");
+      return;
+    }
+
+    let encoded;
+    try {
+      encoded = encodeBasicCredentials(username, password);
+    } catch (error) {
+      console.warn("Unable to encode credentials", error);
+      setSignInMessage("Unable to encode credentials. Please try again.");
+      return;
+    }
+
+    saveAuthToken(`Basic ${encoded}`, Boolean(signInRemember?.checked));
+    hideSignIn();
+    if (lookupFeedback) {
+      lookupFeedback.textContent =
+        "Signed in. You can now use the MyFigureCollection lookup.";
+    }
+  });
+}
+
+if (signInOverlay) {
+  signInOverlay.addEventListener("click", (event) => {
+    if (event.target === signInOverlay) {
+      hideSignIn();
+    }
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && signInOverlay && !signInOverlay.hidden) {
+    hideSignIn();
+  }
+});
+
 if (manager) {
   manager.addEventListener("click", (event) => {
     const button = event.target.closest("[data-action]");
@@ -689,3 +942,6 @@ fetchCollection().then(() => {
   renderManager();
 });
 renderSessionLog();
+if (!authToken) {
+  showSignIn();
+}
