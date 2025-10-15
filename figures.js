@@ -47,6 +47,17 @@ export const figures = [
       "Pastel",
       "Scenery"
     ]
+  },
+  {
+    "id": "re-zero-kara-hajimeru-isekai-seikatsu-rem-luminasta-ameagari-day-sega",
+    "name": "Re:Zero kara Hajimeru Isekai Seikatsu - Rem - Luminasta - Ameagari Day (SEGA)",
+    "series": "Luminasta",
+    "manufacturer": "SEGA",
+    "scale": "W=130mm (5.07in)  H=210mm (8.19in)",
+    "releaseDate": "04/14/2023",
+    "image": "https://static.myfigurecollection.net/upload/pictures/2023/04/03/3531981.jpeg",
+    "caption": "Rem Ameagari Day",
+    "description": "Rem Ameagari Day"
   }
 ];
 
