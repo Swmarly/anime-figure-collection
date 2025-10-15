@@ -1,14 +1,25 @@
 const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "figures-admin";
+const SESSION_COOKIE = "figure_admin_session";
+const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const PUBLIC_ADMIN_ASSETS = new Set([
+  "/admin/login.html",
+  "/admin/login.css",
+  "/admin/login.js",
+]);
 
-const unauthorizedResponse = new Response("Unauthorized", {
-  status: 401,
-  headers: {
-    "WWW-Authenticate": `Basic realm="${BASIC_REALM}", charset="UTF-8"`,
-    "Cache-Control": "no-store",
-  },
-});
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+const unauthorizedResponse = () =>
+  new Response("Unauthorized", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": `Basic realm="${BASIC_REALM}", charset="UTF-8"`,
+      "Cache-Control": "no-store",
+    },
+  });
 
 const decodeBasicAuth = (header) => {
   if (!header) return null;
@@ -27,13 +38,158 @@ const decodeBasicAuth = (header) => {
   }
 };
 
+const encodeBytesToBase64 = (bytes) => {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+};
+
+const encodeStringToBase64 = (value) => {
+  const bytes = textEncoder.encode(value);
+  return encodeBytesToBase64(bytes);
+};
+
+const decodeBase64ToBytes = (value) => {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+const decodeBase64ToString = (value) => {
+  const bytes = decodeBase64ToBytes(value);
+  return textDecoder.decode(bytes);
+};
+
+const timingSafeEqual = (a, b) => {
+  const aBytes = textEncoder.encode(a);
+  const bBytes = textEncoder.encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let result = 0;
+  for (let i = 0; i < aBytes.length; i += 1) {
+    result |= aBytes[i] ^ bBytes[i];
+  }
+  return result === 0;
+};
+
+const signPayload = async (payload, secret) => {
+  const keyData = textEncoder.encode(secret);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(payload));
+  return encodeBytesToBase64(new Uint8Array(signature));
+};
+
 const getAdminCredentials = (env) => {
   const username = env.ADMIN_USERNAME || DEFAULT_USERNAME;
   const password = env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
   return { username, password };
 };
 
-const ensureAuthorized = (request, env) => {
+const getSessionSecret = (env) => env.SESSION_SECRET || env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
+
+const createSessionToken = async (username, env) => {
+  const secret = getSessionSecret(env);
+  if (!secret) {
+    throw new Error("Session secret is not configured.");
+  }
+  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  const payload = `${username}:${expires}`;
+  const signature = await signPayload(payload, secret);
+  const token = `${encodeStringToBase64(username)}.${expires}.${signature}`;
+  return { token, expires };
+};
+
+const verifySessionToken = async (token, env) => {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [encodedUsername, expiresRaw, signature] = parts;
+  if (!encodedUsername || !expiresRaw || !signature) return null;
+
+  let username;
+  try {
+    username = decodeBase64ToString(encodedUsername);
+  } catch (error) {
+    console.warn("Unable to decode session username", error);
+    return null;
+  }
+
+  const expires = Number(expiresRaw);
+  if (!Number.isFinite(expires)) return null;
+  if (expires <= Math.floor(Date.now() / 1000)) return null;
+
+  const secret = getSessionSecret(env);
+  if (!secret) return null;
+
+  const payload = `${username}:${expires}`;
+  const expectedSignature = await signPayload(payload, secret);
+  if (!timingSafeEqual(signature, expectedSignature)) {
+    return null;
+  }
+
+  return { username, expires };
+};
+
+const parseCookies = (header) => {
+  const cookies = {};
+  if (!header) return cookies;
+  const parts = header.split(/;\s*/);
+  for (const part of parts) {
+    if (!part) continue;
+    const [name, ...rest] = part.split("=");
+    if (!name) continue;
+    cookies[name] = rest.join("=");
+  }
+  return cookies;
+};
+
+const getSessionFromCookies = async (request, env) => {
+  const header = request.headers.get("Cookie");
+  if (!header) return null;
+  const cookies = parseCookies(header);
+  if (!cookies[SESSION_COOKIE]) return null;
+  try {
+    const decoded = decodeURIComponent(cookies[SESSION_COOKIE]);
+    return await verifySessionToken(decoded, env);
+  } catch (error) {
+    console.warn("Unable to verify session token", error);
+    return null;
+  }
+};
+
+const createSessionCookie = (token) =>
+  `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=${SESSION_TTL_SECONDS}`;
+
+const expireSessionCookie = () =>
+  `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0`;
+
+const buildLoginRedirectResponse = (request) => {
+  const requestUrl = new URL(request.url);
+  const loginUrl = new URL("/admin/login.html", requestUrl.origin);
+  const pathname = requestUrl.pathname.endsWith("/")
+    ? `${requestUrl.pathname}index.html`
+    : requestUrl.pathname;
+  const redirectTarget = `${pathname}${requestUrl.search}`;
+  loginUrl.searchParams.set("redirect", redirectTarget);
+  return Response.redirect(loginUrl, 303);
+};
+
+const isHtmlRequest = (request) => {
+  const accept = request.headers.get("Accept") || "";
+  return accept.includes("text/html");
+};
+
+const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) => {
   const { username, password } = getAdminCredentials(env);
   if (!password) {
     return new Response("Admin password is not configured.", {
@@ -43,11 +199,19 @@ const ensureAuthorized = (request, env) => {
   }
 
   const credentials = decodeBasicAuth(request.headers.get("Authorization"));
-  if (!credentials) return unauthorizedResponse;
-  if (credentials.username !== username || credentials.password !== password) {
-    return unauthorizedResponse;
+  if (credentials) {
+    if (credentials.username === username && credentials.password === password) {
+      return null;
+    }
+    return unauthorizedResponse();
   }
-  return null;
+
+  const session = await getSessionFromCookies(request, env);
+  if (session) {
+    return null;
+  }
+
+  return redirectToLogin ? buildLoginRedirectResponse(request) : unauthorizedResponse();
 };
 
 const decodeHtml = (value) =>
@@ -190,6 +354,85 @@ const handleMfcRequest = async (request, env) => {
   });
 };
 
+const handleLoginRequest = async (request, env) => {
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { Allow: "POST" },
+    });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const inputUsername = typeof body?.username === "string" ? body.username.trim() : "";
+  const inputPassword = typeof body?.password === "string" ? body.password : "";
+
+  const { username, password } = getAdminCredentials(env);
+  if (!password) {
+    return new Response(JSON.stringify({ error: "Admin password is not configured." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (inputUsername !== username || inputPassword !== password) {
+    return new Response(JSON.stringify({ error: "Invalid username or password." }), {
+      status: 401,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  try {
+    const session = await createSessionToken(username, env);
+    const headers = new Headers({
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    headers.append("Set-Cookie", createSessionCookie(session.token));
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers,
+    });
+  } catch (error) {
+    console.error("Unable to create admin session", error);
+    return new Response(JSON.stringify({ error: "Unable to create session." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+};
+
+const handleLogoutRequest = async () =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Cache-Control": "no-store",
+      "Set-Cookie": expireSessionCookie(),
+    },
+  });
+
+const handleAuthCheckRequest = async (request, env) => {
+  const auth = await ensureAuthorized(request, env);
+  if (auth) {
+    return auth;
+  }
+  return new Response(null, {
+    status: 204,
+    headers: { "Cache-Control": "no-store" },
+  });
+};
+
 const serveAsset = async (request, env) => {
   const response = await env.ASSETS.fetch(request);
   if (response.status !== 404) {
@@ -210,8 +453,20 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    if (url.pathname === "/api/login") {
+      return handleLoginRequest(request, env);
+    }
+
+    if (url.pathname === "/api/logout") {
+      return handleLogoutRequest();
+    }
+
+    if (url.pathname === "/api/auth-check") {
+      return handleAuthCheckRequest(request, env);
+    }
+
     if (url.pathname.startsWith("/api/mfc")) {
-      const auth = ensureAuthorized(request, env);
+      const auth = await ensureAuthorized(request, env);
       if (auth) return auth;
       if (request.method !== "GET") {
         return new Response("Method Not Allowed", {
@@ -222,8 +477,22 @@ export default {
       return handleMfcRequest(request, env);
     }
 
+    if (url.pathname === "/admin" || url.pathname === "/admin/") {
+      return Response.redirect(new URL("/admin/login.html", request.url), 302);
+    }
+
+    if (url.pathname === "/admin/login" || url.pathname === "/admin/login/") {
+      return Response.redirect(new URL("/admin/login.html", request.url), 302);
+    }
+
+    if (PUBLIC_ADMIN_ASSETS.has(url.pathname)) {
+      return serveAsset(request, env, ctx);
+    }
+
     if (url.pathname.startsWith("/admin")) {
-      const auth = ensureAuthorized(request, env);
+      const auth = await ensureAuthorized(request, env, {
+        redirectToLogin: isHtmlRequest(request),
+      });
       if (auth) return auth;
       return serveAsset(request, env, ctx);
     }
