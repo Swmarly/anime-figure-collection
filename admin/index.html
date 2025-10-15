@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Figure Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Quicksand:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <main class="admin">
+      <header class="admin__header">
+        <div>
+          <h1>Figure Admin Panel</h1>
+          <p>
+            Add new entries to your collection, either by importing data directly from
+            MyFigureCollection or by typing the details yourself. Changes stay in your browser
+            until you export the updated collection file.
+          </p>
+        </div>
+        <div class="admin__status" id="collection-status" role="status" aria-live="polite">
+          Loading collection…
+        </div>
+      </header>
+
+      <section class="panel" aria-labelledby="lookup-heading">
+        <div class="panel__header">
+          <h2 id="lookup-heading">MyFigureCollection lookup</h2>
+          <p>
+            Paste a MyFigureCollection item number to fetch the available details. If the request is
+            blocked you can still fill the form manually below.
+          </p>
+        </div>
+        <form class="panel__form" id="mfc-lookup-form" autocomplete="off">
+          <label class="field">
+            <span class="field__label">Item number</span>
+            <input
+              class="field__input"
+              id="mfc-item-id"
+              name="mfc-item-id"
+              inputmode="numeric"
+              pattern="\\d*"
+              placeholder="e.g. 3531981"
+              required
+            />
+          </label>
+          <div class="panel__actions">
+            <button type="submit" class="button button--primary">Fetch details</button>
+            <button type="button" class="button" id="clear-mfc-data">Clear form</button>
+          </div>
+          <p class="panel__hint" id="mfc-feedback" role="alert" aria-live="assertive"></p>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="details-heading">
+        <div class="panel__header">
+          <h2 id="details-heading">Figure details</h2>
+          <p>
+            Review or edit the figure information. Fields marked with * are required. Tags are
+            separated by commas.
+          </p>
+        </div>
+        <form class="panel__form" id="figure-form">
+          <div class="form-grid">
+            <label class="field">
+              <span class="field__label">List *</span>
+              <select class="field__input" id="figure-list" name="list" required>
+                <option value="owned">Owned</option>
+                <option value="wishlist">Wishlist</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Slug *</span>
+              <div class="field__with-action">
+                <input class="field__input" id="figure-slug" name="slug" required />
+                <button type="button" class="button button--ghost" id="generate-slug">
+                  Generate
+                </button>
+              </div>
+              <span class="field__hint">Used internally for IDs and duplicates</span>
+            </label>
+            <label class="field">
+              <span class="field__label">MFC item number</span>
+              <input class="field__input" id="figure-mfc-id" name="mfcId" inputmode="numeric" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Name *</span>
+              <input class="field__input" id="figure-name" name="name" required />
+            </label>
+            <label class="field">
+              <span class="field__label">Series / Origin</span>
+              <input class="field__input" id="figure-series" name="series" />
+            </label>
+            <label class="field">
+              <span class="field__label">Manufacturer</span>
+              <input class="field__input" id="figure-manufacturer" name="manufacturer" />
+            </label>
+            <label class="field">
+              <span class="field__label">Scale</span>
+              <input class="field__input" id="figure-scale" name="scale" />
+            </label>
+            <label class="field">
+              <span class="field__label">Release date</span>
+              <input
+                class="field__input"
+                id="figure-release"
+                name="releaseDate"
+                placeholder="YYYY-MM"
+              />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Image URL</span>
+              <input class="field__input" id="figure-image" name="image" type="url" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Caption</span>
+              <input class="field__input" id="figure-caption" name="caption" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Description</span>
+              <textarea class="field__input" id="figure-description" name="description"></textarea>
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Tags</span>
+              <input
+                class="field__input"
+                id="figure-tags"
+                name="tags"
+                placeholder="magical girl, limited, pastel"
+              />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Custom alt text</span>
+              <input class="field__input" id="figure-alt" name="alt" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Personal notes</span>
+              <textarea class="field__input" id="figure-notes" name="notes"></textarea>
+            </label>
+          </div>
+          <div class="panel__actions">
+            <button type="button" class="button" id="reset-form">Reset</button>
+            <button type="submit" class="button button--primary">Add to collection</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="preview-heading">
+        <div class="panel__header">
+          <h2 id="preview-heading">Preview &amp; export</h2>
+          <p>
+            Review the normalized entry and download the updated <code>collection.json</code> when
+            you are ready. Importing again will include any entries you added during this session.
+          </p>
+        </div>
+        <div class="preview" id="entry-preview" aria-live="polite">
+          <p>Fill out the form to preview the generated JSON.</p>
+        </div>
+        <div class="panel__actions">
+          <button type="button" class="button" id="copy-entry">Copy entry JSON</button>
+          <button type="button" class="button" id="download-json">Download updated collection</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="session-heading">
+        <div class="panel__header">
+          <h2 id="session-heading">Session additions</h2>
+          <p>Entries added during this session will appear here so you can review them at a glance.</p>
+        </div>
+        <div class="session-log" id="session-log" aria-live="polite">
+          <p>No new entries yet.</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="admin.js"></script>
+  </body>
+</html>
