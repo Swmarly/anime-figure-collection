@@ -1,6 +1,6 @@
 const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
-const DEFAULT_PASSWORD = "figures-admin";
+const DEFAULT_PASSWORD = "figureadmin";
 const SESSION_COOKIE = "figure_admin_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const PUBLIC_ADMIN_ASSETS = new Set([
