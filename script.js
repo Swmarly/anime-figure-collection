@@ -33,6 +33,8 @@ const createCard = (item) => {
   const caption = card.querySelector(".figure-card__caption");
   const descriptionEl = card.querySelector(".figure-card__description");
   const tagsList = card.querySelector(".figure-card__tags");
+  const actions = card.querySelector(".figure-card__actions");
+  const mfcLink = card.querySelector("[data-figure-mfc-link]");
 
   image.src = item.image;
   const fallbackAlt = item.name ? `${item.name} figure` : "Anime figure";
@@ -68,6 +70,21 @@ const createCard = (item) => {
     });
   } else {
     tagsList.hidden = true;
+  }
+
+  if (actions && mfcLink) {
+    const mfcUrl = item.links?.mfc ?? (item.mfcId ? `https://myfigurecollection.net/item/${item.mfcId}` : null);
+    if (mfcUrl) {
+      const linkLabel = item.name
+        ? `View ${item.name} on MyFigureCollection`
+        : "View on MyFigureCollection";
+      mfcLink.href = mfcUrl;
+      mfcLink.textContent = linkLabel;
+      mfcLink.setAttribute("aria-label", linkLabel);
+      actions.hidden = false;
+    } else {
+      actions.hidden = true;
+    }
   }
 
   return card;
