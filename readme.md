@@ -42,7 +42,7 @@ wrangler secret put ADMIN_PASSWORD
 
 For Cloudflare Pages, add `ADMIN_USERNAME` and `ADMIN_PASSWORD` as environment variables. Locally, you can start `wrangler dev` with `--var ADMIN_USERNAME=your-name --var ADMIN_PASSWORD=your-password`.
 
-> The repository defaults to `admin` / `figures-admin` for local development. Always override these values before going live.
+> The repository defaults to `admin` / `figureadmin` for local development. Always override these values before going live.
 
 ## 🖼 Figure Object Reference
 Each figure entry in `figures.js` can include the following fields:
