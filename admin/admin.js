@@ -501,12 +501,50 @@ const handleLookup = async (event) => {
       headers: { Accept: "application/json" },
     });
 
+    const contentType = response.headers.get("Content-Type") || "";
+    const bodyText = await response.text();
+
     if (!response.ok) {
-      const message = response.headers.get("X-Error") || `Lookup failed (status ${response.status})`;
-      throw new Error(message);
+      let message =
+        response.headers.get("X-Error") || `Lookup failed (status ${response.status})`;
+
+      if (!message && contentType.includes("application/json")) {
+        try {
+          const parsedError = JSON.parse(bodyText);
+          if (parsedError && typeof parsedError.error === "string") {
+            message = parsedError.error;
+          }
+        } catch (parseError) {
+          console.warn("Unable to parse error response as JSON", parseError);
+        }
+      }
+
+      if (!message && bodyText) {
+        const trimmed = bodyText.trim();
+        if (trimmed) {
+          message =
+            trimmed.length > 160
+              ? `${trimmed.slice(0, 157)}…`
+              : trimmed;
+        }
+      }
+
+      throw new Error(message || "Lookup failed. Please try again.");
     }
 
-    const data = await response.json();
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        "The server returned an unexpected response. Check that the worker is running and you're signed in, then try again."
+      );
+    }
+
+    let data;
+    try {
+      data = JSON.parse(bodyText);
+    } catch (parseError) {
+      console.warn("Unable to parse lookup response as JSON", parseError);
+      throw new Error("Received malformed data from the server. Please try again.");
+    }
     fields.mfcId.value = itemId;
     fields.name.value = data.name ?? fields.name.value;
     fields.series.value = data.series ?? fields.series.value;
