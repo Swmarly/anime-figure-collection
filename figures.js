@@ -39,3 +39,45 @@ export const figures = [
       "A serene moonlit balcony scene complete with porcelain tea set and luminescent fireflies.",
   },
 ];
+
+export const wishlist = [
+  {
+    id: "celestial-gala-idol",
+    name: "Celestial Gala Idol",
+    series: "Starship Serenade",
+    manufacturer: "Nova Beats Studio",
+    scale: "1/7 Scale PVC",
+    releaseDate: "2025-02",
+    image: "https://placekitten.com/480/640?image=12",
+    caption: "Dreaming about this dazzling concert pose!",
+    tags: ["Idol", "Pre-order", "Hologram"],
+    description:
+      "Projected starlight ribbons and layered metallic fabrics make this the ultimate show-stopper.",
+  },
+  {
+    id: "forest-guardian-spirit",
+    name: "Forest Guardian Spirit",
+    series: "Mythic Bloom",
+    manufacturer: "Evergreen Atelier",
+    scale: "1/8 Scale Resin",
+    releaseDate: "2024-09",
+    image: "https://placebear.com/480/640?image=3",
+    caption: "Translucent leaves and glowing familiars—yes please!",
+    tags: ["Nature", "Diorama", "Limited"],
+    description:
+      "An ethereal guardian posed with floating spirit companions and a luminous forest base.",
+  },
+  {
+    id: "mecha-valkyrie-prototype",
+    name: "Valkyrie Prototype Unit",
+    series: "Celestial Aegis",
+    manufacturer: "Astra Armory",
+    scale: "1/6 Scale ABS",
+    releaseDate: "2025-06",
+    image: "https://placebeard.it/480x640?image=8",
+    caption: "Imagine this with real metallic wings shimmering on the shelf!",
+    tags: ["Mecha", "Prototype", "Deluxe"],
+    description:
+      "A dynamic aerial pose featuring articulated armor panels, energy wings, and interchangeable weaponry.",
+  },
+];
