@@ -10,9 +10,9 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 
 ## 🧸 Getting Started
 1. **Preview locally**: open `index.html` in your browser for a static preview, or run `npx wrangler dev` to emulate the production worker (required for the admin login). If you're loading the site from a different domain than your Worker, set `window.__FIGURE_COLLECTION_API_BASE__ = "https://your-worker.example.workers.dev"` in an inline script so the gallery knows where to fetch the collection.
-2. **Connect Cloudflare KV storage** (required for live edits):
+2. **(Optional) Connect Cloudflare KV storage** – the Worker now falls back to an in-memory store when the `COLLECTION` binding is missing so `wrangler deploy` succeeds out of the box. Data saved in this mode only lasts while the Worker instance is warm, so configure KV before going live:
    - Create preview and production namespaces: `npx wrangler kv:namespace create COLLECTION` and `npx wrangler kv:namespace create COLLECTION --preview`.
-   - Copy the generated IDs into [`wrangler.toml`](./wrangler.toml) by replacing the placeholder values for the `COLLECTION` binding.
+   - Uncomment the `kv_namespaces` example in [`wrangler.toml`](./wrangler.toml) and paste the generated IDs so the Worker can read and persist your collection.
    - Seed the namespace with your current data (optional but recommended). You can save an empty
      collection to start fresh or paste JSON exported from another instance:
      ```bash
@@ -29,7 +29,7 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 4. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
 5. **Deploy on Cloudflare Pages or Workers**:
    - **Cloudflare Pages**: point your project at this repository. Set the build command to none and the output directory to the repository root.
-   - **Cloudflare Workers**: run `npx wrangler deploy`. The included `worker.js` serves the static assets and protects the admin area with HTTP Basic Auth.
+   - **Cloudflare Workers**: run `npx wrangler deploy`. The included `worker.js` serves the static assets and protects the admin area with HTTP Basic Auth. Without the KV binding configured, the API stores data in-memory, which is suitable for smoke tests but not for production.
 
 ## 🛠 Admin panel
 
