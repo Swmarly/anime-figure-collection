@@ -668,7 +668,10 @@ export default {
         redirectToLogin: isHtmlRequest(request),
       });
       if (auth) return auth;
-      return Response.redirect(new URL("/admin/index.html", request.url), 302);
+
+      const indexUrl = new URL(request.url);
+      indexUrl.pathname = "/admin/index.html";
+      return serveAsset(cloneRequestForUrl(request, indexUrl), env, ctx);
     }
 
     if (pathname === "/admin/login") {
