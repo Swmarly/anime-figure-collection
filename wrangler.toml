@@ -1,5 +1,5 @@
 name = "anime-figure-collection-worker"
-main = "worker.js"
+main = "_worker.js"
 compatibility_date = "2024-06-01"
 
 [assets]
