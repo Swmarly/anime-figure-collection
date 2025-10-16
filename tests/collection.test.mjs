@@ -43,14 +43,16 @@ const createEnv = () => ({
   },
 });
 
-// GET should return seeded default data and persist it to KV
+// GET should return an empty default collection and persist it to KV
 {
   const env = createEnv();
   const response = await fetchFromWorker('https://example.com/api/collection', {}, env);
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert(Array.isArray(payload.owned));
-  assert(payload.owned.length > 0, 'expected default owned figures to be returned');
+  assert.equal(payload.owned.length, 0, 'expected default owned list to be empty');
+  assert(Array.isArray(payload.wishlist));
+  assert.equal(payload.wishlist.length, 0, 'expected default wishlist to be empty');
   const stored = await env.COLLECTION.get('collection');
   assert(stored, 'expected default collection to be written to KV');
 }

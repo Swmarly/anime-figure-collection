@@ -702,11 +702,12 @@ const handleDownload = () => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "collection.json";
+  anchor.download = "collection-backup.json";
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+  lookupFeedback.textContent = "Downloaded a JSON backup of the Cloudflare collection.";
 };
 
 const handleManualSave = async () => {
