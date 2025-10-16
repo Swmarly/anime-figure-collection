@@ -592,6 +592,9 @@ const resetForm = ({ keepLookup = false } = {}) => {
   state.editing = null;
   renderPreview();
   renderManager();
+  if (fields.name && typeof fields.name.focus === "function") {
+    fields.name.focus();
+  }
 };
 
 const applyEntryToForm = (entry = {}) => {
@@ -988,6 +991,7 @@ const handleFormSubmit = async (event) => {
   }
 
   const previousEditing = state.editing;
+  const wasEditing = Boolean(previousEditing);
   const previous = previousEditing
     ? {
         list: previousEditing.list,
@@ -1006,15 +1010,17 @@ const handleFormSubmit = async (event) => {
     return;
   }
 
-  state.editing = {
-    list: formData.list,
-    slug: formData.entry.slug,
-    mfcId:
-      formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
-        ? formData.entry.mfcId
-        : null,
-    allowIdentityChange: previousEditing?.allowIdentityChange === true,
-  };
+  state.editing = wasEditing
+    ? {
+        list: formData.list,
+        slug: formData.entry.slug,
+        mfcId:
+          formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
+            ? formData.entry.mfcId
+            : null,
+        allowIdentityChange: previousEditing?.allowIdentityChange === true,
+      }
+    : null;
 
   renderManager();
 
@@ -1026,6 +1032,11 @@ const handleFormSubmit = async (event) => {
   });
 
   lookupFeedback.textContent = `${message} Saving to Cloudflare…`;
+  if (!wasEditing) {
+    resetForm({ keepLookup: true });
+  } else {
+    renderPreview();
+  }
   try {
     const result = await persistCollection();
     if (result?.updatedAt) {
@@ -1040,7 +1051,6 @@ const handleFormSubmit = async (event) => {
   } catch (error) {
     lookupFeedback.textContent = `${message} Saved locally but sync failed: ${error.message}`;
   }
-  renderPreview();
 };
 
 const startEditingEntry = (list, slug) => {
