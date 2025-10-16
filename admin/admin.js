@@ -607,7 +607,12 @@ const mergeEntryIntoCollection = (list, entry, previous = null) => {
 
   let index = target.findIndex(matchesNew);
 
-  if (index === -1 && previous && previous.list === list) {
+  const allowFallback =
+    previous &&
+    previous.list === list &&
+    (previous.allowIdentityChange === true || identityMatches(entry, previous));
+
+  if (index === -1 && allowFallback) {
     index = target.findIndex((item) => identityMatches(item, previous));
   }
 
@@ -755,6 +760,7 @@ const handleManualSave = async () => {
             state.editing.mfcId !== undefined && state.editing.mfcId !== null
               ? state.editing.mfcId
               : null,
+          allowIdentityChange: state.editing.allowIdentityChange === true,
         }
       : null;
 
@@ -771,6 +777,7 @@ const handleManualSave = async () => {
         formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
           ? formData.entry.mfcId
           : null,
+      allowIdentityChange: previous?.allowIdentityChange === true,
     };
 
     renderManager();
@@ -919,7 +926,20 @@ const handleFormSubmit = async (event) => {
     return;
   }
 
-  const result = mergeEntryIntoCollection(formData.list, formData.entry, state.editing);
+  const previousEditing = state.editing;
+  const previous = previousEditing
+    ? {
+        list: previousEditing.list,
+        slug: previousEditing.slug,
+        mfcId:
+          previousEditing.mfcId !== undefined && previousEditing.mfcId !== null
+            ? previousEditing.mfcId
+            : null,
+        allowIdentityChange: previousEditing.allowIdentityChange === true,
+      }
+    : null;
+
+  const result = mergeEntryIntoCollection(formData.list, formData.entry, previous);
   if (!result.success) {
     lookupFeedback.textContent = "Unable to update the collection. Please try again.";
     return;
@@ -932,6 +952,7 @@ const handleFormSubmit = async (event) => {
       formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
         ? formData.entry.mfcId
         : null,
+    allowIdentityChange: previousEditing?.allowIdentityChange === true,
   };
 
   renderManager();
@@ -975,6 +996,7 @@ const startEditingEntry = (list, slug) => {
     list,
     slug: entry.slug,
     mfcId: entry.mfcId ?? null,
+    allowIdentityChange: true,
   };
 
   lookupInput.value = entry.mfcId ? String(entry.mfcId) : "";
