@@ -76,3 +76,41 @@ const parseJson = async (response) => {
 }
 
 console.log('Auth tests passed');
+
+// The login page without an extension should be served directly to prevent redirect loops
+{
+  const assetEnv = {
+    ASSETS: {
+      fetch: (request) => {
+        const assetUrl = new URL(request.url);
+        if (assetUrl.pathname === '/admin/login.html') {
+          return new Response(`<!DOCTYPE html><title>Login</title><h1>Sign in to the Figure Admin Panel</h1>`, {
+            headers: { 'Content-Type': 'text/html' },
+          });
+        }
+        if (assetUrl.pathname === '/index.html') {
+          return new Response('<!DOCTYPE html><title>Home</title>', {
+            headers: { 'Content-Type': 'text/html' },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      },
+    },
+  };
+
+  const response = await fetchFromWorker(
+    'https://example.com/admin/login',
+    {
+      headers: { Accept: 'text/html' },
+    },
+    assetEnv,
+  );
+
+  assert.equal(response.status, 200);
+  const contentType = response.headers.get('Content-Type') || '';
+  assert(contentType.includes('text/html'));
+  const body = await response.text();
+  assert(body.includes('Sign in to the Figure Admin Panel'));
+}
+
+console.log('Login page test passed');

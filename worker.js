@@ -623,7 +623,9 @@ export default {
     }
 
     if (pathname === "/admin/login") {
-      return Response.redirect(new URL("/admin/login.html", request.url), 302);
+      const loginUrl = new URL(request.url);
+      loginUrl.pathname = "/admin/login.html";
+      return serveAsset(new Request(loginUrl.toString(), request), env, ctx);
     }
 
     if (PUBLIC_ADMIN_ASSETS.has(url.pathname)) {
