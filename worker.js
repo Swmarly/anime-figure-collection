@@ -167,11 +167,63 @@ const getSessionFromCookies = async (request, env) => {
   }
 };
 
-const createSessionCookie = (token) =>
-  `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=${SESSION_TTL_SECONDS}`;
+const shouldUseSecureCookie = (request) => {
+  const url = new URL(request.url);
+  if (url.protocol === "https:") {
+    return true;
+  }
 
-const expireSessionCookie = () =>
-  `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0`;
+  const forwardedProto = request.headers.get("X-Forwarded-Proto");
+  if (forwardedProto && forwardedProto.split(",")[0]?.trim().toLowerCase() === "https") {
+    return true;
+  }
+
+  const cfVisitorHeader = request.headers.get("CF-Visitor");
+  if (cfVisitorHeader) {
+    try {
+      const cfVisitor = JSON.parse(cfVisitorHeader);
+      if (cfVisitor && typeof cfVisitor.scheme === "string") {
+        return cfVisitor.scheme.toLowerCase() === "https";
+      }
+    } catch (error) {
+      console.warn("Unable to parse CF-Visitor header", error);
+    }
+  }
+
+  return false;
+};
+
+const createSessionCookie = (token, { secure = true } = {}) => {
+  const attributes = [
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${SESSION_TTL_SECONDS}`,
+  ];
+
+  if (secure) {
+    attributes.push("Secure");
+  }
+
+  return attributes.join("; ");
+};
+
+const expireSessionCookie = ({ secure = true } = {}) => {
+  const attributes = [
+    `${SESSION_COOKIE}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    "Max-Age=0",
+  ];
+
+  if (secure) {
+    attributes.push("Secure");
+  }
+
+  return attributes.join("; ");
+};
 
 const buildLoginRedirectResponse = (request) => {
   const requestUrl = new URL(request.url);
@@ -399,7 +451,10 @@ const handleLoginRequest = async (request, env) => {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
     });
-    headers.append("Set-Cookie", createSessionCookie(session.token));
+    headers.append(
+      "Set-Cookie",
+      createSessionCookie(session.token, { secure: shouldUseSecureCookie(request) })
+    );
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers,
@@ -413,14 +468,20 @@ const handleLoginRequest = async (request, env) => {
   }
 };
 
-const handleLogoutRequest = async () =>
-  new Response(null, {
+const handleLogoutRequest = async (request) => {
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  const secure = shouldUseSecureCookie(request);
+  headers.append("Set-Cookie", expireSessionCookie({ secure }));
+
+  if (!secure) {
+    headers.append("Set-Cookie", expireSessionCookie({ secure: true }));
+  }
+
+  return new Response(null, {
     status: 204,
-    headers: {
-      "Cache-Control": "no-store",
-      "Set-Cookie": expireSessionCookie(),
-    },
+    headers,
   });
+};
 
 const handleAuthCheckRequest = async (request, env) => {
   const auth = await ensureAuthorized(request, env);
@@ -458,7 +519,7 @@ export default {
     }
 
     if (url.pathname === "/api/logout") {
-      return handleLogoutRequest();
+      return handleLogoutRequest(request);
     }
 
     if (url.pathname === "/api/auth-check") {
