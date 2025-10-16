@@ -4,19 +4,26 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 
 ## ✨ Features
 - Magical hero section with animated sparkles and a floating mascot orb.
-- Dynamic figure grid fed from a simple JavaScript data file—no extra HTML edits needed.
+- Dynamic figure grid served from Cloudflare KV so changes in the admin panel update the live site automatically.
 - Sorting controls to reorganize by release date or name.
 - Smooth scroll navigation and scroll-in animations for a polished experience.
 
 ## 🧸 Getting Started
 1. **Preview locally**: open `index.html` in your browser for a static preview, or run `npx wrangler dev` to emulate the production worker (required for the admin login).
-2. **Customize the figures**:
-   - Sign in to the admin panel at [`/admin`](https://figures.swmarly.com/admin) using your configured credentials. From there you can import entries from MyFigureCollection, edit the details manually, and download the updated [`data/collection.json`](./data/collection.json).
-   - The JSON file is split into `owned` and `wishlist` arrays so you can track both shelves independently. The admin panel keeps the format intact when you export it.
-   - After editing the JSON manually (or importing it through the admin panel), regenerate the runtime module with `node scripts/generate-figures.mjs` to refresh [`figures.js`](./figures.js).
-   - Each entry can include an optional `mfcId`—cards automatically link back to the corresponding MyFigureCollection page when it is present.
-3. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
-4. **Deploy on Cloudflare Pages or Workers**:
+2. **Connect Cloudflare KV storage** (required for live edits):
+   - Create preview and production namespaces: `npx wrangler kv:namespace create COLLECTION` and `npx wrangler kv:namespace create COLLECTION --preview`.
+   - Copy the generated IDs into [`wrangler.toml`](./wrangler.toml) by replacing the placeholder values for the `COLLECTION` binding.
+   - Seed the namespace with your current data (optional but recommended):
+     ```bash
+     wrangler kv:key put --binding=COLLECTION collection "$(cat data/collection.json)"
+     ```
+     You can re-run the command for the preview namespace with `--preview` when testing locally.
+3. **Manage the collection**:
+   - Sign in to the admin panel at [`/admin`](https://figures.swmarly.com/admin) using your configured credentials.
+   - Import figures from MyFigureCollection or edit them manually; every save writes directly to the `COLLECTION` KV namespace so the public gallery updates as soon as the request completes.
+   - Use the download button in the admin panel if you want an offline backup of the current JSON.
+4. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
+5. **Deploy on Cloudflare Pages or Workers**:
    - **Cloudflare Pages**: point your project at this repository. Set the build command to none and the output directory to the repository root.
    - **Cloudflare Workers**: run `npx wrangler deploy`. The included `worker.js` serves the static assets and protects the admin area with HTTP Basic Auth.
 
@@ -64,8 +71,8 @@ If you cannot obtain the CA file, run the command from a network that does not i
 
 > The repository defaults to `admin` / `figureadmin` for local development. Always override these values before going live.
 
-## 🖼 Figure Object Reference
-Each figure entry in `figures.js` can include the following fields:
+## 🖼 Figure Entry Reference
+Each figure stored in the collection (within the `owned` or `wishlist` arrays) can include the following fields:
 
 ```js
 {
