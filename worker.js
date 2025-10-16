@@ -101,10 +101,49 @@ const sanitizePassword = (value) => {
   return normalized.length > 0 ? normalized : null;
 };
 
+const normalizeToNfkc = (value) =>
+  typeof value === "string" ? value.normalize("NFKC") : null;
+
+const normalizeUsernameForComparison = (value) => {
+  const sanitized = sanitizeUsername(value);
+  if (!sanitized) return null;
+  const normalized = normalizeToNfkc(sanitized);
+  return normalized ? normalized.toLowerCase() : null;
+};
+
+const normalizePasswordForComparison = (value) => {
+  if (typeof value !== "string") return null;
+  const sanitized = sanitizePassword(value);
+  const effectiveValue = sanitized !== null ? sanitized : value;
+  if (!effectiveValue) return null;
+  return normalizeToNfkc(effectiveValue);
+};
+
 const getAdminCredentials = (env) => {
   const username = sanitizeUsername(env.ADMIN_USERNAME) || DEFAULT_USERNAME;
   const password = sanitizePassword(env.ADMIN_PASSWORD) || DEFAULT_PASSWORD;
-  return { username, password };
+  const compareUsername = normalizeUsernameForComparison(username);
+  const comparePassword = normalizePasswordForComparison(password);
+  return { username, password, compareUsername, comparePassword };
+};
+
+const areCredentialsValid = (inputUsername, inputPassword, credentials) => {
+  const expectedUsername = credentials?.compareUsername;
+  const expectedPassword = credentials?.comparePassword;
+  if (!expectedUsername || !expectedPassword) {
+    return false;
+  }
+
+  const normalizedUsername = normalizeUsernameForComparison(inputUsername);
+  const normalizedPassword = normalizePasswordForComparison(inputPassword);
+  if (!normalizedUsername || !normalizedPassword) {
+    return false;
+  }
+
+  return (
+    timingSafeEqual(normalizedUsername, expectedUsername) &&
+    timingSafeEqual(normalizedPassword, expectedPassword)
+  );
 };
 
 const getSessionSecret = (env) =>
@@ -255,21 +294,24 @@ const isHtmlRequest = (request) => {
 };
 
 const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) => {
-  const { username, password } = getAdminCredentials(env);
-  if (!password) {
+  const credentials = getAdminCredentials(env);
+  if (!credentials.password || !credentials.comparePassword) {
     return new Response("Admin password is not configured.", {
       status: 500,
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
 
-  const credentials = decodeBasicAuth(request.headers.get("Authorization"));
-  const hasBasicCredentials = Boolean(credentials);
+  const headerCredentials = decodeBasicAuth(request.headers.get("Authorization"));
+  const hasBasicCredentials = Boolean(headerCredentials);
 
   if (
-    credentials &&
-    credentials.username === username &&
-    credentials.password === password
+    headerCredentials &&
+    areCredentialsValid(
+      headerCredentials.username,
+      headerCredentials.password,
+      credentials
+    )
   ) {
     return null;
   }
@@ -457,15 +499,15 @@ const handleLoginRequest = async (request, env) => {
     });
   }
 
-  const { username, password } = getAdminCredentials(env);
-  if (!password) {
+  const credentials = getAdminCredentials(env);
+  if (!credentials.password || !credentials.comparePassword) {
     return new Response(JSON.stringify({ error: "Admin password is not configured." }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  if (inputUsername !== username || inputPassword !== password) {
+  if (!areCredentialsValid(inputUsername, inputPassword, credentials)) {
     return new Response(JSON.stringify({ error: "Invalid username or password." }), {
       status: 401,
       headers: {
@@ -476,7 +518,7 @@ const handleLoginRequest = async (request, env) => {
   }
 
   try {
-    const session = await createSessionToken(username, env);
+    const session = await createSessionToken(credentials.username, env);
     const headers = new Headers({
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
