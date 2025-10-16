@@ -3,6 +3,26 @@ import { createDefaultCollection } from "./data/default-collection.js";
 let figures = [];
 let wishlist = [];
 
+const configuredApiBase = (() => {
+  if (typeof window === "undefined") return "";
+
+  const globalBase =
+    typeof window.__FIGURE_COLLECTION_API_BASE__ === "string"
+      ? window.__FIGURE_COLLECTION_API_BASE__
+      : null;
+
+  if (globalBase && globalBase.trim()) {
+    return globalBase.trim();
+  }
+
+  const htmlBase = document.documentElement?.dataset?.apiBase;
+  if (typeof htmlBase === "string" && htmlBase.trim()) {
+    return htmlBase.trim();
+  }
+
+  return "";
+})();
+
 const defaultCollection = createDefaultCollection();
 if (Array.isArray(defaultCollection?.owned)) {
   figures = [...defaultCollection.owned];
@@ -160,9 +180,33 @@ const applySorting = () => {
 
 sortSelect?.addEventListener("change", applySorting);
 
+const buildApiUrl = (path) => {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  if (!configuredApiBase) {
+    return path;
+  }
+
+  const normalizedBase = configuredApiBase.replace(/\/+$/g, "");
+  const normalizedPath = path.replace(/^\/+/, "");
+
+  if (!normalizedBase) {
+    return `/${normalizedPath}`;
+  }
+
+  if (!normalizedPath) {
+    return normalizedBase;
+  }
+
+  return `${normalizedBase}/${normalizedPath}`;
+};
+
 const loadCollectionFromApi = async () => {
   try {
-    const response = await fetch("/api/collection", {
+    const response = await fetch(buildApiUrl("/api/collection"), {
       headers: {
         Accept: "application/json",
         "Cache-Control": "no-store",

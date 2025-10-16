@@ -59,7 +59,7 @@
       <header class="collection__header">
         <h2>Figure Showcase</h2>
         <p>
-          Edit <code>figures.js</code> to update names, series, release details, and photos. Add new figures by copying the example entry—no extra HTML needed!
+          Figures are loaded straight from Cloudflare KV storage. Use the admin panel to add or edit entries and the gallery will refresh automatically.
         </p>
       </header>
 
@@ -86,9 +86,7 @@
       <header class="collection__header">
         <h2>Figures I Want</h2>
         <p>
-          Keep track of future grails by editing the <code>wishlist</code> entries in
-          <code>figures.js</code>. They'll display automatically next to your current
-          collection.
+          Keep track of future grails in the admin panel—the wishlist shown here stays in sync with your Cloudflare data.
         </p>
       </header>
 
@@ -100,19 +98,22 @@
       <ol>
         <li>
           Sign in to <code>/admin</code> to import figures from MyFigureCollection or add them
-          manually, then download the refreshed <code>collection.json</code> file.
+          manually. Changes are saved to Cloudflare KV and reflected on this page as soon as you
+          reload.
         </li>
         <li>
-          Run <code>node scripts/generate-figures.mjs</code> after updating the collection to
-          regenerate <code>figures.js</code> for the public site.
-        </li>
-        <li>
-          Need a quick tweak? Open <code>figures.js</code> directly to fine-tune names, captions, or
-          tags.
+          Want an offline backup? Use the download button in the admin panel to export the latest
+          <code>collection.json</code> file.
         </li>
         <li>
           Drop figure images in an <code>assets/</code> folder (or link remote images) and update
           the <code>image</code> URL.
+        </li>
+        <li>
+          Hosting the gallery separately from your Worker? Add
+          <code>data-api-base</code> to the <code>&lt;html&gt;</code> tag (or set
+          <code>window.__FIGURE_COLLECTION_API_BASE__</code>) so this page knows where to fetch the
+          collection JSON.
         </li>
         <li>Want more sparkle? Tweak colors or animations inside <code>styles.css</code>.</li>
       </ol>
@@ -162,7 +163,6 @@
     </li>
   </template>
 
-  <script src="figures.js"></script>
   <script src="script.js" type="module"></script>
 </body>
 </html>
