@@ -9,11 +9,11 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 - Smooth scroll navigation and scroll-in animations for a polished experience.
 
 ## 🧸 Getting Started
-1. **Preview locally**: open `index.html` in your browser for a static preview, or run `npx wrangler dev` to emulate the production worker (required for the admin login).
+1. **Preview locally**: open `index.html` in your browser for a static preview, or run `npx wrangler dev` to emulate the production worker (required for the admin login). If you're loading the site from a different domain than your Worker, set `window.__FIGURE_COLLECTION_API_BASE__ = "https://your-worker.example.workers.dev"` in an inline script so the gallery knows where to fetch the collection.
 2. **Connect Cloudflare KV storage** (required for live edits):
    - Create preview and production namespaces: `npx wrangler kv:namespace create COLLECTION` and `npx wrangler kv:namespace create COLLECTION --preview`.
    - Copy the generated IDs into [`wrangler.toml`](./wrangler.toml) by replacing the placeholder values for the `COLLECTION` binding.
-   - Seed the namespace with your current data (optional but recommended):
+ - Seed the namespace with your current data (optional but recommended):
      ```bash
      wrangler kv:key put --binding=COLLECTION collection "$(cat data/collection.json)"
      ```
@@ -22,6 +22,7 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
    - Sign in to the admin panel at [`/admin`](https://figures.swmarly.com/admin) using your configured credentials.
    - Import figures from MyFigureCollection or edit them manually; every save writes directly to the `COLLECTION` KV namespace so the public gallery updates as soon as the request completes.
    - Use the download button in the admin panel if you want an offline backup of the current JSON.
+   - Serving the gallery from a completely static host? Add `data-api-base="https://your-worker.example.workers.dev"` to the `<html>` tag (or set `window.__FIGURE_COLLECTION_API_BASE__`) so the public page fetches from your Worker.
 4. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
 5. **Deploy on Cloudflare Pages or Workers**:
    - **Cloudflare Pages**: point your project at this repository. Set the build command to none and the output directory to the repository root.
