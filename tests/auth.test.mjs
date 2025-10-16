@@ -120,3 +120,22 @@ console.log('Auth tests passed');
 }
 
 console.log('Login page test passed');
+
+// Local development over HTTP should not receive secure cookies even if proxy headers claim HTTPS.
+{
+  const response = await fetchFromWorker('http://localhost/api/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'CF-Visitor': '{"scheme":"https"}',
+      'X-Forwarded-Proto': 'https',
+    },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+  const setCookie = response.headers.get('set-cookie') || '';
+  assert(!/;\s*secure/i.test(setCookie), 'expected session cookie to be usable over HTTP during local development');
+}
+
+console.log('Local cookie policy test passed');
