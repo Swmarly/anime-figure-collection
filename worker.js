@@ -251,16 +251,23 @@ const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) 
   }
 
   const credentials = decodeBasicAuth(request.headers.get("Authorization"));
-  if (credentials) {
-    if (credentials.username === username && credentials.password === password) {
-      return null;
-    }
-    return unauthorizedResponse();
+  const hasBasicCredentials = Boolean(credentials);
+
+  if (
+    credentials &&
+    credentials.username === username &&
+    credentials.password === password
+  ) {
+    return null;
   }
 
   const session = await getSessionFromCookies(request, env);
   if (session) {
     return null;
+  }
+
+  if (hasBasicCredentials) {
+    return unauthorizedResponse();
   }
 
   return redirectToLogin ? buildLoginRedirectResponse(request) : unauthorizedResponse();
