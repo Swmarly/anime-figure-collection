@@ -237,10 +237,31 @@ const getSessionFromCookies = async (request, env) => {
   }
 };
 
+const LOCAL_HOSTNAMES = new Set([
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+]);
+
+const isLocalHostname = (hostname) => {
+  if (!hostname) return false;
+  const normalized = hostname.toLowerCase();
+  if (LOCAL_HOSTNAMES.has(normalized)) {
+    return true;
+  }
+  return normalized.endsWith(".localhost");
+};
+
 const shouldUseSecureCookie = (request) => {
   const url = new URL(request.url);
+  const hostname = url.hostname || "";
+
   if (url.protocol === "https:") {
     return true;
+  }
+
+  if (url.protocol === "http:" && isLocalHostname(hostname)) {
+    return false;
   }
 
   const forwardedProto = request.headers.get("X-Forwarded-Proto");
