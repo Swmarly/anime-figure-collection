@@ -9,6 +9,18 @@ const PUBLIC_ADMIN_ASSETS = new Set([
   "/admin/login.js",
 ]);
 
+const cloneRequestForUrl = (request, targetUrl) => {
+  const headers = new Headers();
+  request.headers.forEach((value, key) => {
+    headers.append(key, value);
+  });
+
+  return new Request(typeof targetUrl === "string" ? targetUrl : targetUrl.toString(), {
+    method: request.method,
+    headers,
+  });
+};
+
 const normalizePathname = (pathname) => {
   if (!pathname) return "/";
   const normalized = pathname.replace(/\/+$/g, "");
@@ -625,7 +637,7 @@ export default {
     if (pathname === "/admin/login") {
       const loginUrl = new URL(request.url);
       loginUrl.pathname = "/admin/login.html";
-      return serveAsset(new Request(loginUrl.toString(), request), env, ctx);
+      return serveAsset(cloneRequestForUrl(request, loginUrl), env, ctx);
     }
 
     if (PUBLIC_ADMIN_ASSETS.has(url.pathname)) {
