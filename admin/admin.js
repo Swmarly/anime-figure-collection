@@ -36,6 +36,60 @@ const fields = {
   notes: field("figure-notes"),
 };
 
+const slugState = {
+  manual: false,
+  lastGenerated: "",
+};
+
+let updatingSlugProgrammatically = false;
+
+const resetSlugState = () => {
+  slugState.manual = false;
+  slugState.lastGenerated = "";
+};
+
+const setSlugField = (value, { generated = false } = {}) => {
+  if (!fields.slug) return;
+  updatingSlugProgrammatically = true;
+  fields.slug.value = value || "";
+  updatingSlugProgrammatically = false;
+  if (generated) {
+    slugState.manual = false;
+    slugState.lastGenerated = fields.slug.value.trim();
+  }
+};
+
+const autoUpdateSlugFromName = () => {
+  if (!fields.name || !fields.slug) return;
+  if (slugState.manual) return;
+  const nameValue = fields.name.value.trim();
+  const mfcValue = fields.mfcId ? fields.mfcId.value.trim() : "";
+  if (!nameValue && !mfcValue) {
+    if (!fields.slug.value.trim()) {
+      resetSlugState();
+    }
+    return;
+  }
+  const generated = slugify({ name: nameValue, mfcId: mfcValue });
+  if (!generated) return;
+  if (fields.slug.value.trim() === generated) {
+    setSlugField(generated, { generated: true });
+    return;
+  }
+  setSlugField(generated, { generated: true });
+};
+
+const handleSlugInputChange = () => {
+  if (!fields.slug || updatingSlugProgrammatically) return;
+  const current = fields.slug.value.trim();
+  if (!current) {
+    resetSlugState();
+    return;
+  }
+  slugState.manual = true;
+  slugState.lastGenerated = current;
+};
+
 const state = {
   collection: { owned: [], wishlist: [] },
   loaded: false,
@@ -523,12 +577,13 @@ const ensureSlug = () => {
     name: fields.name.value.trim(),
     mfcId: fields.mfcId.value.trim(),
   });
-  fields.slug.value = generated;
+  setSlugField(generated, { generated: true });
   return generated;
 };
 
 const resetForm = ({ keepLookup = false } = {}) => {
   figureForm.reset();
+  resetSlugState();
   if (!keepLookup) {
     lookupInput.value = "";
     lookupFeedback.textContent = "";
@@ -543,7 +598,13 @@ const applyEntryToForm = (entry = {}) => {
   if (entry.list) {
     fields.list.value = entry.list;
   }
-  if (entry.slug) fields.slug.value = entry.slug;
+  if (entry.slug) {
+    setSlugField(entry.slug);
+    slugState.manual = true;
+    slugState.lastGenerated = fields.slug.value.trim();
+  } else {
+    setSlugField("", { generated: true });
+  }
   if (entry.mfcId) fields.mfcId.value = entry.mfcId;
   if (entry.name) fields.name.value = entry.name;
   if (entry.series) fields.series.value = entry.series;
@@ -897,7 +958,7 @@ const handleLookup = async (event) => {
     }
 
     if (!fields.slug.value.trim()) {
-      fields.slug.value = slugify({ name: data.name, mfcId: itemId });
+      setSlugField(slugify({ name: data.name, mfcId: itemId }), { generated: true });
     }
 
     lookupFeedback.textContent = "Details imported. Review and adjust below.";
@@ -990,6 +1051,7 @@ const startEditingEntry = (list, slug) => {
   if (!entry) return;
 
   figureForm.reset();
+  resetSlugState();
   fields.list.value = list;
   applyEntryToForm({ ...entry, list });
   state.editing = {
@@ -1057,6 +1119,21 @@ const handleDeleteEntry = async (list, slug) => {
   }
 };
 
+if (fields.name) {
+  fields.name.addEventListener("input", autoUpdateSlugFromName);
+  fields.name.addEventListener("change", autoUpdateSlugFromName);
+}
+
+if (fields.mfcId) {
+  fields.mfcId.addEventListener("input", autoUpdateSlugFromName);
+  fields.mfcId.addEventListener("change", autoUpdateSlugFromName);
+}
+
+if (fields.slug) {
+  fields.slug.addEventListener("input", handleSlugInputChange);
+  fields.slug.addEventListener("change", handleSlugInputChange);
+}
+
 lookupForm.addEventListener("submit", handleLookup);
 clearLookupButton.addEventListener("click", () => {
   lookupInput.value = "";
@@ -1075,10 +1152,13 @@ if (saveChangesButton) {
   saveChangesButton.addEventListener("click", handleManualSave);
 }
 generateSlugButton.addEventListener("click", () => {
-  fields.slug.value = slugify({
-    name: fields.name.value.trim(),
-    mfcId: fields.mfcId.value.trim(),
-  });
+  setSlugField(
+    slugify({
+      name: fields.name.value.trim(),
+      mfcId: fields.mfcId.value.trim(),
+    }),
+    { generated: true },
+  );
   renderPreview();
 });
 
