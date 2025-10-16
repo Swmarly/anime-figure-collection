@@ -89,13 +89,26 @@ const signPayload = async (payload, secret) => {
   return encodeBytesToBase64(new Uint8Array(signature));
 };
 
+const sanitizeUsername = (value) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const sanitizePassword = (value) => {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/[\r\n]+$/g, "");
+  return normalized.length > 0 ? normalized : null;
+};
+
 const getAdminCredentials = (env) => {
-  const username = env.ADMIN_USERNAME || DEFAULT_USERNAME;
-  const password = env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
+  const username = sanitizeUsername(env.ADMIN_USERNAME) || DEFAULT_USERNAME;
+  const password = sanitizePassword(env.ADMIN_PASSWORD) || DEFAULT_PASSWORD;
   return { username, password };
 };
 
-const getSessionSecret = (env) => env.SESSION_SECRET || env.ADMIN_PASSWORD || DEFAULT_PASSWORD;
+const getSessionSecret = (env) =>
+  sanitizePassword(env.SESSION_SECRET) || sanitizePassword(env.ADMIN_PASSWORD) || DEFAULT_PASSWORD;
 
 const createSessionToken = async (username, env) => {
   const secret = getSessionSecret(env);
