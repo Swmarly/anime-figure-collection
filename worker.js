@@ -316,13 +316,25 @@ const expireSessionCookie = ({ secure = true } = {}) => {
   return attributes.join("; ");
 };
 
+const ensureIndexPathname = (pathname) => {
+  if (!pathname) return "/index.html";
+  if (pathname.endsWith("/")) {
+    return `${pathname}index.html`;
+  }
+
+  const lastSegment = pathname.split("/").pop() || "";
+  if (!lastSegment.includes(".")) {
+    return `${pathname}/index.html`;
+  }
+
+  return pathname;
+};
+
 const buildLoginRedirectResponse = (request) => {
   const requestUrl = new URL(request.url);
   const loginUrl = new URL("/admin/login.html", requestUrl.origin);
-  const pathname = requestUrl.pathname.endsWith("/")
-    ? `${requestUrl.pathname}index.html`
-    : requestUrl.pathname;
-  const redirectTarget = `${pathname}${requestUrl.search}`;
+  const redirectPathname = ensureIndexPathname(requestUrl.pathname);
+  const redirectTarget = `${redirectPathname}${requestUrl.search}`;
   loginUrl.searchParams.set("redirect", redirectTarget);
   return Response.redirect(loginUrl, 303);
 };
@@ -652,7 +664,11 @@ export default {
     }
 
     if (pathname === "/admin") {
-      return Response.redirect(new URL("/admin/login.html", request.url), 302);
+      const auth = await ensureAuthorized(request, env, {
+        redirectToLogin: isHtmlRequest(request),
+      });
+      if (auth) return auth;
+      return Response.redirect(new URL("/admin/index.html", request.url), 302);
     }
 
     if (pathname === "/admin/login") {
