@@ -12,6 +12,10 @@ const preview = document.getElementById("entry-preview");
 const generateSlugButton = document.getElementById("generate-slug");
 const manager = document.getElementById("collection-manager");
 const signOutButton = document.getElementById("sign-out-button");
+const saveChangesButton = document.getElementById("save-changes");
+const saveButtonDefaultLabel = saveChangesButton
+  ? saveChangesButton.textContent.trim() || "Save changes"
+  : "Save changes";
 
 const field = (id) => document.getElementById(id);
 
@@ -300,21 +304,42 @@ const persistCollection = async () => {
   return saveTask;
 };
 
+const updateSaveButton = () => {
+  if (!saveChangesButton) return;
+  if (!state.loaded) {
+    saveChangesButton.disabled = true;
+    saveChangesButton.textContent = saveButtonDefaultLabel;
+    return;
+  }
+
+  if (state.saving) {
+    saveChangesButton.disabled = true;
+    saveChangesButton.textContent = "Saving…";
+    return;
+  }
+
+  saveChangesButton.disabled = false;
+  saveChangesButton.textContent = saveButtonDefaultLabel;
+};
+
 const updateStatus = () => {
   const owned = state.collection.owned?.length ?? 0;
   const wishlist = state.collection.wishlist?.length ?? 0;
   if (!state.loaded) {
     collectionStatus.textContent = "Loading collection…";
+    updateSaveButton();
     return;
   }
 
   if (state.saving) {
     collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Saving…`;
+    updateSaveButton();
     return;
   }
 
   if (state.lastError) {
     collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Sync failed`;
+    updateSaveButton();
     return;
   }
 
@@ -324,10 +349,12 @@ const updateStatus = () => {
       ? state.lastSavedAt
       : date.toLocaleString();
     collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Last saved ${formatted}`;
+    updateSaveButton();
     return;
   }
 
   collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist`;
+  updateSaveButton();
 };
 
 const renderSessionLog = () => {
@@ -338,12 +365,18 @@ const renderSessionLog = () => {
 
   const markup = state.additions
     .map((item) => {
-      const actionLabel =
-        item.action === "updated"
-          ? "Updated"
-          : item.action === "moved"
-          ? "Moved"
-          : "Added";
+      const actionLabel = (() => {
+        switch (item.action) {
+          case "updated":
+            return "Updated";
+          case "moved":
+            return "Moved";
+          case "deleted":
+            return "Deleted";
+          default:
+            return "Added";
+        }
+      })();
       const listLabel = formatListName(item.list);
       const tags = item.entry.tags?.length
         ? `<span>Tags: ${escapeHtml(item.entry.tags.join(", "))}</span>`
@@ -400,18 +433,35 @@ const renderManagerSection = (title, listKey, items = []) => {
       const meta = metaParts.length
         ? `<div class="manager__meta">${metaParts.join(" · ")}</div>`
         : "";
+      const slugAttr = entry.slug ? escapeHtml(entry.slug) : "";
+      const mfcAttr = entry.mfcId ? escapeHtml(String(entry.mfcId)) : "";
+      const deleteDisabled = state.saving ? " disabled" : "";
       return `
         <li>
-          <button
-            type="button"
-            class="manager__item${isActive ? " manager__item--active" : ""}"
-            data-action="edit-entry"
-            data-list="${escapeHtml(listKey)}"
-            data-slug="${entry.slug ? escapeHtml(entry.slug) : ""}"
-          >
-            <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
-            ${meta}
-          </button>
+          <div class="manager__item-row">
+            <button
+              type="button"
+              class="manager__item${isActive ? " manager__item--active" : ""}"
+              data-action="edit-entry"
+              data-list="${escapeHtml(listKey)}"
+              data-slug="${slugAttr}"
+              data-mfc-id="${mfcAttr}"
+            >
+              <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
+              ${meta}
+            </button>
+            <button
+              type="button"
+              class="manager__delete"
+              data-action="delete-entry"
+              data-list="${escapeHtml(listKey)}"
+              data-slug="${slugAttr}"
+              data-mfc-id="${mfcAttr}"
+              ${deleteDisabled}
+            >
+              Delete
+            </button>
+          </div>
         </li>
       `;
     })
@@ -542,6 +592,7 @@ const fetchCollection = async () => {
     if (manager) {
       manager.innerHTML = `<p class="manager__placeholder">${escapeHtml(error.message)}</p>`;
     }
+    updateSaveButton();
   }
 };
 
@@ -593,6 +644,39 @@ const mergeEntryIntoCollection = (list, entry, previous = null) => {
   return { success: true, action, from };
 };
 
+const removeEntryFromCollection = (list, slug) => {
+  if (!state.loaded) return { success: false };
+  const target = state.collection[list];
+  if (!Array.isArray(target)) return { success: false };
+
+  const index = target.findIndex((item) => item.slug === slug);
+  if (index === -1) return { success: false };
+
+  const [removed] = target.splice(index, 1);
+  if (!removed) return { success: false };
+
+  const removedEntry = { ...removed };
+
+  const wasEditing =
+    state.editing &&
+    state.editing.list === list &&
+    identityMatches(removed, state.editing);
+
+  if (wasEditing) {
+    figureForm.reset();
+    fields.list.value = "owned";
+    state.editing = null;
+    renderPreview();
+  }
+
+  state.additions.unshift({ list, entry: removedEntry, action: "deleted" });
+  state.additions = state.additions.slice(0, 20);
+  updateStatus();
+  renderSessionLog();
+  renderManager();
+  return { success: true, removed: removedEntry, wasEditing };
+};
+
 const handleCopyEntry = async () => {
   const formData = readForm();
   if (!formData) {
@@ -623,6 +707,29 @@ const handleDownload = () => {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+};
+
+const handleManualSave = async () => {
+  if (!state.loaded) {
+    lookupFeedback.textContent = "Load the collection before saving.";
+    return;
+  }
+
+  lookupFeedback.textContent = "Saving collection to Cloudflare…";
+  try {
+    const result = await persistCollection();
+    if (result?.updatedAt) {
+      const savedDate = new Date(result.updatedAt);
+      const formatted = Number.isNaN(savedDate.getTime())
+        ? result.updatedAt
+        : savedDate.toLocaleString();
+      lookupFeedback.textContent = `Collection synced at ${formatted}.`;
+    } else {
+      lookupFeedback.textContent = "Collection synced.";
+    }
+  } catch (error) {
+    lookupFeedback.textContent = `Unable to save collection: ${error.message}`;
+  }
 };
 
 const handleLookup = async (event) => {
@@ -803,6 +910,55 @@ const startEditingEntry = (list, slug) => {
   }
 };
 
+const handleDeleteEntry = async (list, slug) => {
+  if (!list || !slug) return;
+  if (!state.loaded) {
+    lookupFeedback.textContent = "Load the collection before deleting.";
+    return;
+  }
+
+  const entries = state.collection[list];
+  const existing = Array.isArray(entries) ? entries.find((item) => item.slug === slug) : null;
+  const listLabel = formatListName(list);
+  const label = existing
+    ? getEntryLabel(existing)
+    : slug
+    ? `slug ${slug}`
+    : "this figure";
+
+  const shouldDelete =
+    typeof window !== "undefined" && typeof window.confirm === "function"
+      ? window.confirm(`Remove “${label}” from ${listLabel}? This cannot be undone.`)
+      : true;
+
+  if (!shouldDelete) return;
+
+  const removal = removeEntryFromCollection(list, slug);
+  if (!removal.success) {
+    lookupFeedback.textContent = "Unable to delete the selected figure. Please try again.";
+    return;
+  }
+
+  const removedLabel = getEntryLabel(removal.removed);
+  const message = `Deleted ${removedLabel} from ${listLabel}.`;
+  lookupFeedback.textContent = `${message} Saving to Cloudflare…`;
+
+  try {
+    const result = await persistCollection();
+    if (result?.updatedAt) {
+      const savedDate = new Date(result.updatedAt);
+      const formatted = Number.isNaN(savedDate.getTime())
+        ? result.updatedAt
+        : savedDate.toLocaleString();
+      lookupFeedback.textContent = `${message} Synced at ${formatted}.`;
+    } else {
+      lookupFeedback.textContent = `${message} Synced.`;
+    }
+  } catch (error) {
+    lookupFeedback.textContent = `${message} Removed locally but sync failed: ${error.message}`;
+  }
+};
+
 lookupForm.addEventListener("submit", handleLookup);
 clearLookupButton.addEventListener("click", () => {
   lookupInput.value = "";
@@ -817,6 +973,9 @@ resetFormButton.addEventListener("click", () => {
 });
 copyEntryButton.addEventListener("click", handleCopyEntry);
 downloadButton.addEventListener("click", handleDownload);
+if (saveChangesButton) {
+  saveChangesButton.addEventListener("click", handleManualSave);
+}
 generateSlugButton.addEventListener("click", () => {
   fields.slug.value = slugify({
     name: fields.name.value.trim(),
@@ -855,9 +1014,17 @@ if (manager) {
       state.editing = null;
       renderManager();
       lookupFeedback.textContent = "Editing cleared. Select a figure to edit or fill the form to add a new one.";
+    } else if (action === "delete-entry") {
+      const list = button.dataset.list;
+      const slug = button.dataset.slug;
+      if (list && slug) {
+        handleDeleteEntry(list, slug);
+      }
     }
   });
 }
+
+updateSaveButton();
 
 fetchCollection().then(() => {
   renderPreview();
