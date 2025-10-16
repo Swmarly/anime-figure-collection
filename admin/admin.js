@@ -644,6 +644,32 @@ const mergeEntryIntoCollection = (list, entry, previous = null) => {
   return { success: true, action, from };
 };
 
+const describeEntryChange = ({
+  entry,
+  list,
+  action,
+  from,
+  includeDownloadHint = true,
+}) => {
+  const listLabel = formatListName(list);
+  const entryLabel = getEntryLabel(entry);
+
+  if (action === "updated") {
+    return `Updated ${entryLabel} in ${listLabel}.`;
+  }
+
+  if (action === "moved") {
+    const fromLabel = from ? formatListName(from) : "previous list";
+    return `Moved ${entryLabel} from ${fromLabel} to ${listLabel}.`;
+  }
+
+  if (includeDownloadHint) {
+    return `Saved to ${listLabel}. Download the JSON when you're ready.`;
+  }
+
+  return `Saved ${entryLabel} to ${listLabel}.`;
+};
+
 const removeEntryFromCollection = (list, slug) => {
   if (!state.loaded) return { success: false };
   const target = state.collection[list];
@@ -716,7 +742,53 @@ const handleManualSave = async () => {
     return;
   }
 
-  lookupFeedback.textContent = "Saving collection to Cloudflare…";
+  let statusPrefix = "";
+  let syncMessage = "Saving collection to Cloudflare…";
+
+  const formData = readForm();
+  if (formData) {
+    const previous = state.editing
+      ? {
+          list: state.editing.list,
+          slug: state.editing.slug,
+          mfcId:
+            state.editing.mfcId !== undefined && state.editing.mfcId !== null
+              ? state.editing.mfcId
+              : null,
+        }
+      : null;
+
+    const mergeResult = mergeEntryIntoCollection(formData.list, formData.entry, previous);
+    if (!mergeResult.success) {
+      lookupFeedback.textContent = "Unable to update the collection. Please try again.";
+      return;
+    }
+
+    state.editing = {
+      list: formData.list,
+      slug: formData.entry.slug,
+      mfcId:
+        formData.entry.mfcId !== undefined && formData.entry.mfcId !== null
+          ? formData.entry.mfcId
+          : null,
+    };
+
+    renderManager();
+    renderPreview();
+
+    statusPrefix = describeEntryChange({
+      entry: formData.entry,
+      list: formData.list,
+      action: mergeResult.action,
+      from: mergeResult.from,
+      includeDownloadHint: false,
+    });
+
+    syncMessage = `${statusPrefix} Saving to Cloudflare…`;
+  }
+
+  lookupFeedback.textContent = syncMessage;
+
   try {
     const result = await persistCollection();
     if (result?.updatedAt) {
@@ -724,12 +796,18 @@ const handleManualSave = async () => {
       const formatted = Number.isNaN(savedDate.getTime())
         ? result.updatedAt
         : savedDate.toLocaleString();
-      lookupFeedback.textContent = `Collection synced at ${formatted}.`;
+      lookupFeedback.textContent = statusPrefix
+        ? `${statusPrefix} Synced at ${formatted}.`
+        : `Collection synced at ${formatted}.`;
     } else {
-      lookupFeedback.textContent = "Collection synced.";
+      lookupFeedback.textContent = statusPrefix
+        ? `${statusPrefix} Synced.`
+        : "Collection synced.";
     }
   } catch (error) {
-    lookupFeedback.textContent = `Unable to save collection: ${error.message}`;
+    lookupFeedback.textContent = statusPrefix
+      ? `${statusPrefix} Saved locally but sync failed: ${error.message}`
+      : `Unable to save collection: ${error.message}`;
   }
 };
 
@@ -858,15 +936,12 @@ const handleFormSubmit = async (event) => {
 
   renderManager();
 
-  let message = `Saved to ${formatListName(formData.list)}. Download the JSON when you're ready.`;
-  if (result.action === "updated") {
-    message = `Updated ${formData.entry.name} in ${formatListName(formData.list)}.`;
-  } else if (result.action === "moved") {
-    const fromLabel = result.from ? formatListName(result.from) : "previous list";
-    message = `Moved ${formData.entry.name} from ${fromLabel} to ${formatListName(
-      formData.list
-    )}.`;
-  }
+  const message = describeEntryChange({
+    entry: formData.entry,
+    list: formData.list,
+    action: result.action,
+    from: result.from,
+  });
 
   lookupFeedback.textContent = `${message} Saving to Cloudflare…`;
   try {
