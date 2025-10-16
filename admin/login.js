@@ -87,7 +87,7 @@ if (form) {
         return;
       }
 
-      let errorMessage = "Invalid username or password.";
+      let errorMessage = "";
       const contentType = response.headers.get("Content-Type") || "";
       if (contentType.includes("application/json")) {
         try {
@@ -97,6 +97,20 @@ if (form) {
           }
         } catch (error) {
           console.warn("Unable to parse login error payload", error);
+        }
+      }
+
+      if (!errorMessage) {
+        if (response.status === 401) {
+          errorMessage = "Invalid username or password.";
+        } else if (response.status === 404) {
+          errorMessage = "The login service is unavailable. Make sure the Worker backend is running.";
+        } else if (response.status === 405) {
+          errorMessage = "The login endpoint only accepts POST requests. Something is misconfigured.";
+        } else if (response.status >= 500) {
+          errorMessage = "The server encountered an error. Please try again shortly.";
+        } else {
+          errorMessage = "Unexpected response from the login service. Please verify your setup.";
         }
       }
 

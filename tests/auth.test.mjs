@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+
+const ensureBase64Helpers = () => {
+  if (typeof globalThis.atob !== 'function') {
+    globalThis.atob = (value) => Buffer.from(value, 'base64').toString('binary');
+  }
+  if (typeof globalThis.btoa !== 'function') {
+    globalThis.btoa = (value) => Buffer.from(value, 'binary').toString('base64');
+  }
+};
+
+ensureBase64Helpers();
+
+const worker = await import('../worker.js');
+
+const fetchFromWorker = (url, init = {}, env = {}) => worker.default.fetch(new Request(url, init), env, {});
+
+const parseJson = async (response) => {
+  const clone = response.clone();
+  const contentType = clone.headers.get('Content-Type') || '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+  try {
+    return await clone.json();
+  } catch {
+    return null;
+  }
+};
+
+// Successful login with default credentials
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get('set-cookie'), 'expected a session cookie to be returned');
+  const payload = await parseJson(response);
+  assert.deepEqual(payload, { success: true });
+}
+
+// Invalid credentials should report an error payload
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'wrong' }),
+  });
+
+  assert.equal(response.status, 401);
+  const payload = await parseJson(response);
+  assert(payload?.error?.includes('Invalid username or password'));
+}
+
+// GET requests should be rejected with Method Not Allowed
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'GET',
+  });
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('Allow'), 'POST');
+}
+
+console.log('Auth tests passed');
