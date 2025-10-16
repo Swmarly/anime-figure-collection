@@ -106,7 +106,8 @@ if (form) {
         } else if (response.status === 404) {
           errorMessage = "The login service is unavailable. Make sure the Worker backend is running.";
         } else if (response.status === 405) {
-          errorMessage = "The login endpoint only accepts POST requests. Something is misconfigured.";
+          errorMessage =
+            "The login endpoint only accepts POST requests. Start the Cloudflare Worker (e.g. `npx wrangler dev`) so /api/login is handled server-side.";
         } else if (response.status >= 500) {
           errorMessage = "The server encountered an error. Please try again shortly.";
         } else {
