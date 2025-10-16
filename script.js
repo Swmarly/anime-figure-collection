@@ -1,5 +1,3 @@
-import { createDefaultCollection } from "./data/default-collection.js";
-
 let figures = [];
 let wishlist = [];
 
@@ -22,14 +20,6 @@ const configuredApiBase = (() => {
 
   return "";
 })();
-
-const defaultCollection = createDefaultCollection();
-if (Array.isArray(defaultCollection?.owned)) {
-  figures = [...defaultCollection.owned];
-}
-if (Array.isArray(defaultCollection?.wishlist)) {
-  wishlist = [...defaultCollection.wishlist];
-}
 
 const grid = document.getElementById("figure-grid");
 const wishlistGrid = document.getElementById("wishlist-grid");
@@ -136,7 +126,16 @@ const createCard = (item) => {
   return card;
 };
 
-const renderList = (container, items) => {
+const renderStatusMessage = (container, message) => {
+  if (!container) return;
+  container.innerHTML = "";
+  const item = document.createElement("li");
+  item.className = "figure-grid__message";
+  item.textContent = message;
+  container.append(item);
+};
+
+const renderList = (container, items, emptyMessage) => {
   if (!container) return;
   container.innerHTML = "";
   const fragment = document.createDocumentFragment();
@@ -146,6 +145,10 @@ const renderList = (container, items) => {
   });
 
   container.append(fragment);
+
+  if (!items.length && emptyMessage) {
+    renderStatusMessage(container, emptyMessage);
+  }
 };
 
 const observer = new IntersectionObserver(
@@ -173,8 +176,16 @@ const applySorting = () => {
   const sortedFigures = [...figures].sort(sorter);
   const sortedWishlist = [...wishlist].sort(sorter);
 
-  renderList(grid, sortedFigures);
-  renderList(wishlistGrid, sortedWishlist);
+  renderList(
+    grid,
+    sortedFigures,
+    "No figures yet. Add some through the admin panel."
+  );
+  renderList(
+    wishlistGrid,
+    sortedWishlist,
+    "Your wishlist is empty. Save figures from the admin panel to see them here."
+  );
   refreshCardObservations();
 };
 
@@ -219,7 +230,15 @@ const loadCollectionFromApi = async () => {
     applyCollection(data);
     applySorting();
   } catch (error) {
-    console.warn("Falling back to bundled collection data", error);
+    console.warn("Unable to load collection from Cloudflare", error);
+    renderStatusMessage(
+      grid,
+      "Unable to load your collection from Cloudflare. Check the admin panel and try again."
+    );
+    renderStatusMessage(
+      wishlistGrid,
+      "Unable to load your wishlist from Cloudflare."
+    );
   }
 };
 
@@ -307,7 +326,8 @@ themeToggle?.addEventListener("contextmenu", (event) => {
 
 const init = () => {
   loadThemePreference();
-  applySorting();
+  renderStatusMessage(grid, "Loading collection from Cloudflare…");
+  renderStatusMessage(wishlistGrid, "Loading wishlist from Cloudflare…");
   loadCollectionFromApi();
 };
 

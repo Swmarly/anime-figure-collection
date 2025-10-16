@@ -454,6 +454,18 @@ main {
   padding: 0;
 }
 
+.figure-grid__message {
+  grid-column: 1 / -1;
+  padding: 2rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--card-surface), transparent 30%);
+  border-radius: var(--border-radius-md);
+  border: 2px dashed color-mix(in srgb, var(--card-border), transparent 15%);
+}
+
 .figure-card {
   position: relative;
   height: 100%;

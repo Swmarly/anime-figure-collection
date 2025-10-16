@@ -13,15 +13,18 @@ A dreamy, anime-inspired static gallery for showcasing your collection of figure
 2. **Connect Cloudflare KV storage** (required for live edits):
    - Create preview and production namespaces: `npx wrangler kv:namespace create COLLECTION` and `npx wrangler kv:namespace create COLLECTION --preview`.
    - Copy the generated IDs into [`wrangler.toml`](./wrangler.toml) by replacing the placeholder values for the `COLLECTION` binding.
- - Seed the namespace with your current data (optional but recommended):
+   - Seed the namespace with your current data (optional but recommended). You can save an empty
+     collection to start fresh or paste JSON exported from another instance:
      ```bash
-     wrangler kv:key put --binding=COLLECTION collection "$(cat data/collection.json)"
+     wrangler kv:key put --binding=COLLECTION collection '{"owned":[],"wishlist":[]}'
      ```
-     You can re-run the command for the preview namespace with `--preview` when testing locally.
+     Re-run the command with `--preview` to populate the preview namespace when testing locally, or
+     simply sign in to the admin panel and add entries—every save writes directly to KV.
 3. **Manage the collection**:
    - Sign in to the admin panel at [`/admin`](https://figures.swmarly.com/admin) using your configured credentials.
    - Import figures from MyFigureCollection or edit them manually; every save writes directly to the `COLLECTION` KV namespace so the public gallery updates as soon as the request completes.
-   - Use the download button in the admin panel if you want an offline backup of the current JSON.
+   - Use the download button in the admin panel if you want an offline JSON backup straight from
+     Cloudflare.
    - Serving the gallery from a completely static host? Add `data-api-base="https://your-worker.example.workers.dev"` to the `<html>` tag (or set `window.__FIGURE_COLLECTION_API_BASE__`) so the public page fetches from your Worker.
 4. **Tweak the look & feel**: adjust colors, gradients, or layout inside [`styles.css`](./styles.css).
 5. **Deploy on Cloudflare Pages or Workers**:
@@ -34,7 +37,8 @@ Visit `/admin` (for example, <https://figures.swmarly.com/admin>) to manage the 
 
 - Look up figures by MyFigureCollection item number. The Worker fetches the page server-side and pre-fills the form with any available metadata, including images, manufacturer, and release information.
 - Switch to manual mode at any point—every field can be edited before you save.
-- Append entries to the in-memory collection, keep track of everything you added during the session, and export the refreshed `collection.json` file for safekeeping.
+- Append entries to the in-memory collection, keep track of everything you added during the session,
+  and download a JSON backup of the Cloudflare collection for safekeeping.
 
 ### Authentication
 
