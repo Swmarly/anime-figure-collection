@@ -43,6 +43,12 @@ const createEnv = () => ({
   },
 });
 
+const createEnvWithoutKv = () => ({
+  ASSETS: {
+    fetch: () => new Response(null, { status: 404 }),
+  },
+});
+
 // GET should return an empty default collection and persist it to KV
 {
   const env = createEnv();
@@ -110,3 +116,39 @@ const basicAuth = `Basic ${Buffer.from('admin:figureadmin').toString('base64')}`
 }
 
 console.log('Collection tests passed');
+
+// The API should remain functional when the KV binding is missing
+{
+  const env = createEnvWithoutKv();
+  const firstResponse = await fetchFromWorker('https://example.com/api/collection', {}, env);
+  assert.equal(firstResponse.status, 200);
+  const firstPayload = await firstResponse.json();
+  assert.equal(firstPayload.owned.length, 0);
+  assert.equal(firstPayload.wishlist.length, 0);
+
+  const updateResponse = await fetchFromWorker(
+    'https://example.com/api/collection',
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: basicAuth,
+      },
+      body: JSON.stringify({
+        owned: [{ name: 'Memory Figure' }],
+        wishlist: [],
+      }),
+    },
+    env,
+  );
+
+  assert.equal(updateResponse.status, 200);
+  const { updatedAt } = await updateResponse.json();
+  assert(updatedAt, 'expected updatedAt to be returned when saving without KV');
+
+  const secondResponse = await fetchFromWorker('https://example.com/api/collection', {}, env);
+  const secondPayload = await secondResponse.json();
+  assert.equal(secondPayload.owned.length, 1, 'expected in-memory store to persist data across requests');
+}
+
+console.log('Collection no-KV tests passed');

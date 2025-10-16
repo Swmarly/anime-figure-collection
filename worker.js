@@ -1,5 +1,14 @@
 import { createDefaultCollection } from "./data/default-collection.js";
 
+const memoryStoreSymbol = Symbol.for("figure.collection.memory");
+
+const getMemoryStore = () => {
+  if (!globalThis[memoryStoreSymbol]) {
+    globalThis[memoryStoreSymbol] = { record: null };
+  }
+  return globalThis[memoryStoreSymbol];
+};
+
 const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "figureadmin";
@@ -119,7 +128,13 @@ const normalizeCollection = (input) => {
 
 const loadCollectionFromStorage = async (env) => {
   if (!env.COLLECTION) {
-    return { ...createDefaultCollection(), updatedAt: null };
+    const memory = getMemoryStore();
+    if (memory.record) {
+      return memory.record;
+    }
+    const fallback = { ...createDefaultCollection(), updatedAt: null };
+    memory.record = fallback;
+    return fallback;
   }
 
   try {
@@ -150,13 +165,15 @@ const loadCollectionFromStorage = async (env) => {
 };
 
 const storeCollection = async (env, payload) => {
-  if (!env.COLLECTION) {
-    throw new Error("The COLLECTION KV namespace is not configured.");
-  }
-
   const { owned, wishlist } = normalizeCollection(payload);
   const timestamp = new Date().toISOString();
   const record = { owned, wishlist, updatedAt: timestamp };
+
+  if (!env.COLLECTION) {
+    const memory = getMemoryStore();
+    memory.record = record;
+    return record;
+  }
 
   await env.COLLECTION.put(COLLECTION_KV_KEY, JSON.stringify(record));
   return record;

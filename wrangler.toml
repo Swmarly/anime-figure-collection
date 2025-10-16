@@ -5,7 +5,9 @@ compatibility_date = "2024-06-01"
 [assets]
 directory = "."
 
-[[kv_namespaces]]
-binding = "COLLECTION"
-id = "553d5f5eb218a4b04c3bb2afa4e779e9"
-preview_id = "43626cada6e94c6aa89618fd0c78d3e3"
+# Uncomment and replace the IDs below after creating your KV namespaces.
+# Without this binding the Worker falls back to an in-memory store.
+# [[kv_namespaces]]
+# binding = "COLLECTION"
+# id = "<production-namespace-id>"
+# preview_id = "<preview-namespace-id>"
