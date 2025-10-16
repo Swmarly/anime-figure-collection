@@ -78,6 +78,7 @@ const parseJson = async (response) => {
 console.log('Auth tests passed');
 
 // The login page without an extension should be served directly to prevent redirect loops
+// triggered by upstream permanent redirects (e.g. 308 responses when requesting /admin/login).
 {
   const assetEnv = {
     ASSETS: {
@@ -93,7 +94,12 @@ console.log('Auth tests passed');
             headers: { 'Content-Type': 'text/html' },
           });
         }
-        return new Response('Not Found', { status: 404 });
+        return new Response(null, {
+          status: 308,
+          headers: {
+            Location: 'https://example.com/admin/login/',
+          },
+        });
       },
     },
   };
