@@ -444,8 +444,18 @@ const handleLoginRequest = async (request, env) => {
     });
   }
 
-  const inputUsername = typeof body?.username === "string" ? body.username.trim() : "";
-  const inputPassword = typeof body?.password === "string" ? body.password : "";
+  const inputUsername =
+    typeof body?.username === "string" ? sanitizeUsername(body.username) || "" : "";
+  const rawPassword = typeof body?.password === "string" ? body.password : "";
+  const normalizedPassword = sanitizePassword(rawPassword);
+  const inputPassword = normalizedPassword !== null ? normalizedPassword : rawPassword;
+
+  if (!inputUsername || rawPassword.length === 0) {
+    return new Response(JSON.stringify({ error: "Enter both your username and password." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const { username, password } = getAdminCredentials(env);
   if (!password) {
