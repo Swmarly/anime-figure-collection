@@ -1,3 +1,5 @@
+import { createDefaultCollection } from "./data/default-collection.js";
+
 const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "figureadmin";
@@ -8,6 +10,157 @@ const PUBLIC_ADMIN_ASSETS = new Set([
   "/admin/login.css",
   "/admin/login.js",
 ]);
+
+const COLLECTION_KV_KEY = "collection";
+
+const keepEmptyKeys = new Set(["tags", "notes", "alt"]);
+
+const sanitizeTags = (value) => {
+  if (value === null) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((tag) => String(tag).trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const compactEntry = (entry) => {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+
+  return Object.entries(entry).reduce((acc, [key, value]) => {
+    if (value === undefined) {
+      return acc;
+    }
+
+    if (key === "tags") {
+      acc.tags = sanitizeTags(value);
+      return acc;
+    }
+
+    if (key === "mfcId") {
+      if (value === null || value === undefined || value === "") {
+        acc.mfcId = null;
+        return acc;
+      }
+      const numeric = Number(value);
+      acc.mfcId = Number.isFinite(numeric) ? numeric : null;
+      return acc;
+    }
+
+    if (value === null) {
+      if (keepEmptyKeys.has(key)) {
+        acc[key] = null;
+      }
+      return acc;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        if (keepEmptyKeys.has(key)) {
+          acc[key] = "";
+        }
+        return acc;
+      }
+      acc[key] = trimmed;
+      return acc;
+    }
+
+    if (Array.isArray(value)) {
+      const items = value
+        .map((item) => (typeof item === "string" ? item.trim() : item))
+        .filter((item) => item !== undefined && item !== null && item !== "");
+      if (items.length || keepEmptyKeys.has(key)) {
+        acc[key] = items;
+      }
+      return acc;
+    }
+
+    if (typeof value === "object") {
+      const nested = compactEntry(value);
+      if (nested && Object.keys(nested).length) {
+        acc[key] = nested;
+      }
+      return acc;
+    }
+
+    acc[key] = value;
+    return acc;
+  }, {});
+};
+
+const normalizeCollection = (input) => {
+  const ownedSource = Array.isArray(input?.owned) ? input.owned : [];
+  const wishlistSource = Array.isArray(input?.wishlist) ? input.wishlist : [];
+
+  const owned = ownedSource
+    .map((item) => compactEntry(item))
+    .filter((item) => item && Object.keys(item).length);
+  const wishlist = wishlistSource
+    .map((item) => compactEntry(item))
+    .filter((item) => item && Object.keys(item).length);
+
+  return { owned, wishlist };
+};
+
+const loadCollectionFromStorage = async (env) => {
+  if (!env.COLLECTION) {
+    return { ...createDefaultCollection(), updatedAt: null };
+  }
+
+  try {
+    const stored = await env.COLLECTION.get(COLLECTION_KV_KEY, { type: "json" });
+    if (stored && typeof stored === "object") {
+      return {
+        owned: Array.isArray(stored.owned) ? stored.owned : [],
+        wishlist: Array.isArray(stored.wishlist) ? stored.wishlist : [],
+        updatedAt: stored.updatedAt ?? null,
+      };
+    }
+  } catch (error) {
+    console.warn("Unable to read collection from KV", error);
+  }
+
+  const fallback = createDefaultCollection();
+  const timestamp = new Date().toISOString();
+  try {
+    await env.COLLECTION.put(
+      COLLECTION_KV_KEY,
+      JSON.stringify({ ...fallback, updatedAt: timestamp })
+    );
+    return { ...fallback, updatedAt: timestamp };
+  } catch (error) {
+    console.warn("Unable to seed KV with default collection", error);
+    return { ...fallback, updatedAt: null };
+  }
+};
+
+const storeCollection = async (env, payload) => {
+  if (!env.COLLECTION) {
+    throw new Error("The COLLECTION KV namespace is not configured.");
+  }
+
+  const { owned, wishlist } = normalizeCollection(payload);
+  const timestamp = new Date().toISOString();
+  const record = { owned, wishlist, updatedAt: timestamp };
+
+  await env.COLLECTION.put(COLLECTION_KV_KEY, JSON.stringify(record));
+  return record;
+};
 
 const cloneRequestForUrl = (request, targetUrl) => {
   const headers = new Headers();
@@ -617,6 +770,49 @@ const handleAuthCheckRequest = async (request, env) => {
   });
 };
 
+const handleCollectionGetRequest = async (request, env) => {
+  const collection = await loadCollectionFromStorage(env);
+  return new Response(JSON.stringify(collection), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+  });
+};
+
+const handleCollectionPutRequest = async (request, env) => {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (error) {
+    return new Response(JSON.stringify({ error: "A JSON body is required." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const saved = await storeCollection(env, payload);
+    return new Response(JSON.stringify({ success: true, updatedAt: saved.updatedAt }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    console.error("Unable to store collection", error);
+    return new Response(
+      JSON.stringify({ error: error.message || "Unable to save collection." }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+};
+
 const serveAsset = async (request, env) => {
   const response = await env.ASSETS.fetch(request);
   if (response.status !== 404) {
@@ -649,6 +845,27 @@ export default {
 
     if (pathname === "/api/auth-check") {
       return handleAuthCheckRequest(request, env);
+    }
+
+    if (pathname === "/api/collection") {
+      if (request.method === "GET") {
+        return handleCollectionGetRequest(request, env);
+      }
+      if (request.method === "PUT") {
+        const auth = await ensureAuthorized(request, env);
+        if (auth) return auth;
+        return handleCollectionPutRequest(request, env);
+      }
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: { Allow: "GET, PUT, OPTIONS" },
+        });
+      }
+      return new Response("Method Not Allowed", {
+        status: 405,
+        headers: { Allow: "GET, PUT, OPTIONS" },
+      });
     }
 
     if (pathname.startsWith("/api/mfc")) {

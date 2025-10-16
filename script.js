@@ -1,4 +1,15 @@
-import { figures, wishlist } from "./figures.js";
+import { createDefaultCollection } from "./data/default-collection.js";
+
+let figures = [];
+let wishlist = [];
+
+const defaultCollection = createDefaultCollection();
+if (Array.isArray(defaultCollection?.owned)) {
+  figures = [...defaultCollection.owned];
+}
+if (Array.isArray(defaultCollection?.wishlist)) {
+  wishlist = [...defaultCollection.wishlist];
+}
 
 const grid = document.getElementById("figure-grid");
 const wishlistGrid = document.getElementById("wishlist-grid");
@@ -17,6 +28,18 @@ const sorters = {
   "name-desc": (a, b) => b.name.localeCompare(a.name),
 };
 
+const applyCollection = (collection) => {
+  if (!collection || typeof collection !== "object") {
+    return;
+  }
+
+  const owned = Array.isArray(collection.owned) ? collection.owned : [];
+  const wished = Array.isArray(collection.wishlist) ? collection.wishlist : [];
+
+  figures = owned.map((item) => ({ ...item }));
+  wishlist = wished.map((item) => ({ ...item }));
+};
+
 const formatRelease = (value) => {
   if (!value) return "TBA";
   if (!value.includes("-")) return value;
@@ -27,7 +50,10 @@ const formatRelease = (value) => {
 
 const createCard = (item) => {
   const card = cardTemplate.content.firstElementChild.cloneNode(true);
-  card.dataset.figureId = item.id;
+  const identifier = item.slug || item.id;
+  if (identifier) {
+    card.dataset.figureId = identifier;
+  }
 
   const image = card.querySelector(".figure-card__image");
   const caption = card.querySelector(".figure-card__caption");
@@ -134,6 +160,25 @@ const applySorting = () => {
 
 sortSelect?.addEventListener("change", applySorting);
 
+const loadCollectionFromApi = async () => {
+  try {
+    const response = await fetch("/api/collection", {
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Collection request failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    applyCollection(data);
+    applySorting();
+  } catch (error) {
+    console.warn("Falling back to bundled collection data", error);
+  }
+};
+
 document
   .querySelectorAll("[data-scroll-to]")
   .forEach((button) => {
@@ -219,6 +264,7 @@ themeToggle?.addEventListener("contextmenu", (event) => {
 const init = () => {
   loadThemePreference();
   applySorting();
+  loadCollectionFromApi();
 };
 
 init();

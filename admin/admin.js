@@ -37,10 +37,15 @@ const state = {
   loaded: false,
   additions: [],
   editing: null,
+  saving: false,
+  lastSavedAt: null,
+  lastError: null,
+  savePromise: null,
 };
 
 const LOGIN_PAGE = "/admin/login.html";
 const AUTH_CHECK_ENDPOINT = "/api/auth-check";
+const COLLECTION_ENDPOINT = "/api/collection";
 const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
 
 const redirectToLogin = () => {
@@ -234,14 +239,95 @@ const renderPreview = () => {
   preview.innerHTML = `<pre>${escapeHtml(json)}</pre>`;
 };
 
+const buildCollectionPayload = () => ({
+  owned: Array.isArray(state.collection.owned)
+    ? state.collection.owned.map((item) => ({ ...item }))
+    : [],
+  wishlist: Array.isArray(state.collection.wishlist)
+    ? state.collection.wishlist.map((item) => ({ ...item }))
+    : [],
+});
+
+const persistCollection = async () => {
+  if (!state.loaded) {
+    throw new Error("Collection is not loaded yet.");
+  }
+
+  if (state.savePromise) {
+    return state.savePromise;
+  }
+
+  const payload = buildCollectionPayload();
+
+  state.saving = true;
+  state.lastError = null;
+  updateStatus();
+
+  const saveTask = (async () => {
+    try {
+      const response = await authorizedFetch(COLLECTION_ENDPOINT, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Cache-Control": "no-store",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const message = await response
+          .json()
+          .catch(() => ({ error: response.statusText || "Unable to save collection." }));
+        throw new Error(message.error || `Unable to save collection (status ${response.status}).`);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      state.lastSavedAt = result.updatedAt || new Date().toISOString();
+      state.lastError = null;
+      return { success: true, updatedAt: state.lastSavedAt };
+    } catch (error) {
+      state.lastError = error;
+      throw error;
+    } finally {
+      state.saving = false;
+      state.savePromise = null;
+      updateStatus();
+    }
+  })();
+
+  state.savePromise = saveTask;
+  return saveTask;
+};
+
 const updateStatus = () => {
   const owned = state.collection.owned?.length ?? 0;
   const wishlist = state.collection.wishlist?.length ?? 0;
-  if (state.loaded) {
-    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist`;
-  } else {
+  if (!state.loaded) {
     collectionStatus.textContent = "Loading collection…";
+    return;
   }
+
+  if (state.saving) {
+    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Saving…`;
+    return;
+  }
+
+  if (state.lastError) {
+    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Sync failed`;
+    return;
+  }
+
+  if (state.lastSavedAt) {
+    const date = new Date(state.lastSavedAt);
+    const formatted = Number.isNaN(date.getTime())
+      ? state.lastSavedAt
+      : date.toLocaleString();
+    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Last saved ${formatted}`;
+    return;
+  }
+
+  collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist`;
 };
 
 const renderSessionLog = () => {
@@ -427,25 +513,31 @@ const applyEntryToForm = (entry = {}) => {
 
 const fetchCollection = async () => {
   try {
-    const response = await fetch("../data/collection.json?ts=" + Date.now(), {
+    const response = await authorizedFetch(COLLECTION_ENDPOINT, {
+      method: "GET",
       headers: {
         Accept: "application/json",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-store",
       },
     });
+
     if (!response.ok) {
       throw new Error(`Unable to load collection (status ${response.status})`);
     }
+
     const data = await response.json();
     state.collection = {
       owned: Array.isArray(data.owned) ? [...data.owned] : [],
       wishlist: Array.isArray(data.wishlist) ? [...data.wishlist] : [],
     };
     state.loaded = true;
+    state.lastError = null;
+    state.lastSavedAt = data.updatedAt ?? null;
     updateStatus();
     renderManager();
   } catch (error) {
     state.loaded = false;
+    state.lastError = error;
     collectionStatus.textContent = error.message;
     if (manager) {
       manager.innerHTML = `<p class="manager__placeholder">${escapeHtml(error.message)}</p>`;
@@ -627,7 +719,7 @@ const handleLookup = async (event) => {
   }
 };
 
-const handleFormSubmit = (event) => {
+const handleFormSubmit = async (event) => {
   event.preventDefault();
   ensureSlug();
   const formData = readForm();
@@ -668,7 +760,21 @@ const handleFormSubmit = (event) => {
     )}.`;
   }
 
-  lookupFeedback.textContent = message;
+  lookupFeedback.textContent = `${message} Saving to Cloudflare…`;
+  try {
+    const result = await persistCollection();
+    if (result?.updatedAt) {
+      const savedDate = new Date(result.updatedAt);
+      const formatted = Number.isNaN(savedDate.getTime())
+        ? result.updatedAt
+        : savedDate.toLocaleString();
+      lookupFeedback.textContent = `${message} Synced at ${formatted}.`;
+    } else {
+      lookupFeedback.textContent = `${message} Synced.`;
+    }
+  } catch (error) {
+    lookupFeedback.textContent = `${message} Saved locally but sync failed: ${error.message}`;
+  }
   renderPreview();
 };
 
