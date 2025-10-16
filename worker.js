@@ -9,6 +9,16 @@ const PUBLIC_ADMIN_ASSETS = new Set([
   "/admin/login.js",
 ]);
 
+const rewriteRequestPathname = (request, pathname) => {
+  const url = new URL(request.url);
+  url.pathname = pathname;
+  const method = request.method === "HEAD" ? "HEAD" : "GET";
+  return new Request(url.toString(), {
+    headers: request.headers,
+    method,
+  });
+};
+
 const normalizePathname = (pathname) => {
   if (!pathname) return "/";
   const normalized = pathname.replace(/\/+$/g, "");
@@ -623,7 +633,7 @@ export default {
     }
 
     if (pathname === "/admin/login") {
-      return Response.redirect(new URL("/admin/login.html", request.url), 302);
+      return serveAsset(rewriteRequestPathname(request, "/admin/login.html"), env, ctx);
     }
 
     if (PUBLIC_ADMIN_ASSETS.has(url.pathname)) {
