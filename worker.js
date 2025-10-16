@@ -566,24 +566,94 @@ const decodeHtml = (value) =>
 const extractMeta = (html, attribute, name) => {
   const regex = new RegExp(
     `<meta[^>]+${attribute}="${name}"[^>]+content="([^"]*)"[^>]*>`,
-    "i"
+    "i",
   );
   const match = regex.exec(html);
   return match ? decodeHtml(match[1]) : null;
 };
 
+const cleanFieldValue = (value) => {
+  if (!value) return null;
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "-" || normalized === "n/a" || normalized === "?" || normalized === "unknown") {
+    return null;
+  }
+  return trimmed;
+};
+
 const extractField = (html, ...labels) => {
-  for (const label of labels) {
-    const regex = new RegExp(
-      `<th[^>]*>\\s*${label}\\s*<\\/th>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
-      "i"
+  if (!html) return null;
+  const normalizedLabels = labels
+    .filter(Boolean)
+    .map((label) => label.toLowerCase().replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (!normalizedLabels.length) return null;
+
+  const rowRegex =
+    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi;
+  let match;
+  while ((match = rowRegex.exec(html))) {
+    const heading = cleanFieldValue(decodeHtml(match[1]));
+    if (!heading) continue;
+    const headingNormalized = heading.toLowerCase();
+    const matchesLabel = normalizedLabels.some(
+      (label) => headingNormalized === label || headingNormalized.includes(label),
     );
-    const match = regex.exec(html);
-    if (match) {
-      return decodeHtml(match[1]);
+    if (!matchesLabel) continue;
+    const value = cleanFieldValue(decodeHtml(match[2]));
+    if (value) {
+      return value;
     }
   }
+
   return null;
+};
+
+const normalizeReleaseDate = (value) => {
+  const cleaned = cleanFieldValue(value);
+  if (!cleaned) return null;
+
+  const numericMatch = cleaned.match(/(\d{4})[-/](\d{1,2})/);
+  if (numericMatch) {
+    const [, year, month] = numericMatch;
+    return `${year}-${month.padStart(2, "0")}`;
+  }
+
+  const monthMatch = cleaned.match(
+    /(jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may\.?|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:tember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)\s+(\d{4})/i,
+  );
+  if (monthMatch) {
+    const monthNames = {
+      jan: "01",
+      feb: "02",
+      mar: "03",
+      apr: "04",
+      may: "05",
+      jun: "06",
+      jul: "07",
+      aug: "08",
+      sep: "09",
+      oct: "10",
+      nov: "11",
+      dec: "12",
+    };
+    const monthKey = monthMatch[1].toLowerCase().replace(/\./g, "").slice(0, 3);
+    const year = monthMatch[2];
+    const monthNumber = monthNames[monthKey];
+    if (monthNumber) {
+      return `${year}-${monthNumber}`;
+    }
+  }
+
+  const yearMatch = cleaned.match(/\b(\d{4})\b/);
+  if (yearMatch) {
+    return `${yearMatch[1]}`;
+  }
+
+  return cleaned;
 };
 
 const summarizeText = (value) => {
@@ -600,13 +670,21 @@ const parseMfcHtml = (html) => {
   const keywords = extractMeta(html, "name", "keywords");
 
   const series =
-    extractField(html, "Origin", "Source", "Series") ||
+    extractField(html, "Origin", "Source", "Series", "Origin of Character") ||
     extractField(html, "Character") ||
     null;
-  const manufacturer = extractField(html, "Manufacturer", "Company");
-  const scale = extractField(html, "Scale", "Classification");
-  const releaseDate =
-    extractField(html, "Release", "Released", "Release Date", "Release date") || null;
+  const manufacturer = extractField(html, "Manufacturer", "Company", "Producer");
+  const scale = extractField(html, "Scale", "Classification", "Ratio", "Size");
+  const releaseDate = normalizeReleaseDate(
+    extractField(
+      html,
+      "Release",
+      "Released",
+      "Release Date",
+      "Release date",
+      "Original release",
+    ),
+  );
 
   const tags = keywords
     ? keywords
