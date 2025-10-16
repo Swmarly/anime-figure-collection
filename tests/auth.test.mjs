@@ -42,6 +42,17 @@ const parseJson = async (response) => {
   assert.deepEqual(payload, { success: true });
 }
 
+// Trailing slash on the login endpoint should be accepted
+{
+  const response = await fetchFromWorker('https://example.com/api/login/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+}
+
 // Invalid credentials should report an error payload
 {
   const response = await fetchFromWorker('https://example.com/api/login', {

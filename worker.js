@@ -9,6 +9,12 @@ const PUBLIC_ADMIN_ASSETS = new Set([
   "/admin/login.js",
 ]);
 
+const normalizePathname = (pathname) => {
+  if (!pathname) return "/";
+  const normalized = pathname.replace(/\/+$/g, "");
+  return normalized === "" ? "/" : normalized;
+};
+
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
@@ -586,19 +592,21 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/login") {
+    const pathname = normalizePathname(url.pathname);
+
+    if (pathname === "/api/login") {
       return handleLoginRequest(request, env);
     }
 
-    if (url.pathname === "/api/logout") {
+    if (pathname === "/api/logout") {
       return handleLogoutRequest(request);
     }
 
-    if (url.pathname === "/api/auth-check") {
+    if (pathname === "/api/auth-check") {
       return handleAuthCheckRequest(request, env);
     }
 
-    if (url.pathname.startsWith("/api/mfc")) {
+    if (pathname.startsWith("/api/mfc")) {
       const auth = await ensureAuthorized(request, env);
       if (auth) return auth;
       if (request.method !== "GET") {
@@ -610,11 +618,11 @@ export default {
       return handleMfcRequest(request, env);
     }
 
-    if (url.pathname === "/admin" || url.pathname === "/admin/") {
+    if (pathname === "/admin") {
       return Response.redirect(new URL("/admin/login.html", request.url), 302);
     }
 
-    if (url.pathname === "/admin/login" || url.pathname === "/admin/login/") {
+    if (pathname === "/admin/login") {
       return Response.redirect(new URL("/admin/login.html", request.url), 302);
     }
 
@@ -622,7 +630,7 @@ export default {
       return serveAsset(request, env, ctx);
     }
 
-    if (url.pathname.startsWith("/admin")) {
+    if (pathname.startsWith("/admin")) {
       const auth = await ensureAuthorized(request, env, {
         redirectToLogin: isHtmlRequest(request),
       });
