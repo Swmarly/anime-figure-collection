@@ -1,6 +1,6 @@
-# Kawaii Figure Vault
+# Anime Figure Collection
 
-Kawaii Figure Vault is a personal playground for experimenting with a dreamy anime-themed figure gallery. The site pairs a static, highly polished front page with a lightweight Cloudflare Worker so the collection can be curated from anywhere without rebuilding the site.
+Anime Figure Collection is a personal playground for experimenting with a dreamy anime-themed figure gallery. The site pairs a static, highly polished front page with a lightweight Cloudflare Worker so the collection can be curated from anywhere without rebuilding the site.
 
 ## How the project fits together
 - **Static gallery** – `index.html`, `styles.css`, and `script.js` render the public collection. The layout focuses on soft gradients, animated sparkles, and scroll-triggered reveals to give the page the feel of a collector's shrine.
