@@ -9,6 +9,18 @@ const getMemoryStore = () => {
   return globalThis[memoryStoreSymbol];
 };
 
+const envMemorySymbol = Symbol.for("figure.collection.envMemory");
+
+const getEnvMemoryStore = (env) => {
+  if (!env || typeof env !== "object") {
+    return null;
+  }
+  if (!env[envMemorySymbol]) {
+    env[envMemorySymbol] = { record: null };
+  }
+  return env[envMemorySymbol];
+};
+
 const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "figureadmin";
@@ -126,42 +138,138 @@ const normalizeCollection = (input) => {
   return { owned, wishlist };
 };
 
-const loadCollectionFromStorage = async (env) => {
-  if (!env.COLLECTION) {
-    const memory = getMemoryStore();
-    if (memory.record) {
-      return memory.record;
-    }
-    const fallback = { ...createDefaultCollection(), updatedAt: null };
-    memory.record = fallback;
-    return fallback;
-  }
+const COLLECTION_CACHE_KEY = "https://anime-figure-collection.local/collection";
 
+const resolveCollectionBinding = (env) => {
+  if (!env || typeof env !== "object") return null;
+  const possibleKeys = [
+    "COLLECTION",
+    "FIGURE_COLLECTION",
+    "FIGURE_COLLECTION_KV",
+    "COLLECTION_KV",
+  ];
+  for (const key of possibleKeys) {
+    if (env[key]) {
+      return env[key];
+    }
+  }
+  return null;
+};
+
+const getCache = () => {
   try {
-    const stored = await env.COLLECTION.get(COLLECTION_KV_KEY, { type: "json" });
-    if (stored && typeof stored === "object") {
+    if (typeof caches !== "undefined" && caches.default) {
+      return caches.default;
+    }
+  } catch (error) {
+    console.warn("Cache API is not available", error);
+  }
+  return null;
+};
+
+const readCollectionFromCache = async () => {
+  const cache = getCache();
+  if (!cache) return null;
+  try {
+    const match = await cache.match(COLLECTION_CACHE_KEY);
+    if (!match) return null;
+    const data = await match.json();
+    if (data && typeof data === "object") {
       return {
-        owned: Array.isArray(stored.owned) ? stored.owned : [],
-        wishlist: Array.isArray(stored.wishlist) ? stored.wishlist : [],
-        updatedAt: stored.updatedAt ?? null,
+        owned: Array.isArray(data.owned) ? data.owned : [],
+        wishlist: Array.isArray(data.wishlist) ? data.wishlist : [],
+        updatedAt: data.updatedAt ?? null,
       };
     }
   } catch (error) {
-    console.warn("Unable to read collection from KV", error);
+    console.warn("Unable to read collection from cache", error);
+  }
+  return null;
+};
+
+const writeCollectionToCache = async (record) => {
+  const cache = getCache();
+  if (!cache) return;
+  try {
+    const response = new Response(JSON.stringify(record), {
+      headers: {
+        "Cache-Control": "max-age=31536000",
+        "Content-Type": "application/json",
+      },
+    });
+    await cache.put(COLLECTION_CACHE_KEY, response);
+  } catch (error) {
+    console.warn("Unable to write collection to cache", error);
+  }
+};
+
+const loadCollectionFromStorage = async (env) => {
+  const binding = resolveCollectionBinding(env);
+  const envMemory = getEnvMemoryStore(env);
+
+  if (binding) {
+    try {
+      const stored = await binding.get(COLLECTION_KV_KEY, { type: "json" });
+      if (stored && typeof stored === "object") {
+        const record = {
+          owned: Array.isArray(stored.owned) ? stored.owned : [],
+          wishlist: Array.isArray(stored.wishlist) ? stored.wishlist : [],
+          updatedAt: stored.updatedAt ?? null,
+        };
+        await writeCollectionToCache(record);
+        const memory = getMemoryStore();
+        memory.record = record;
+        if (envMemory) {
+          envMemory.record = record;
+        }
+        return record;
+      }
+    } catch (error) {
+      console.warn("Unable to read collection from KV", error);
+    }
+
+    const fallback = createDefaultCollection();
+    const seeded = { ...fallback, updatedAt: new Date().toISOString() };
+    try {
+      await binding.put(COLLECTION_KV_KEY, JSON.stringify(seeded));
+      await writeCollectionToCache(seeded);
+      const memory = getMemoryStore();
+      memory.record = seeded;
+      if (envMemory) {
+        envMemory.record = seeded;
+      }
+      return seeded;
+    } catch (error) {
+      console.warn("Unable to seed KV with default collection", error);
+    }
+  }
+
+  if (!binding && envMemory?.record) {
+    return envMemory.record;
+  }
+
+  const cached = await readCollectionFromCache();
+  if (cached) {
+    const memory = getMemoryStore();
+    memory.record = cached;
+    if (envMemory) {
+      envMemory.record = cached;
+    }
+    return cached;
+  }
+
+  const memory = getMemoryStore();
+  if (!envMemory && memory.record) {
+    return memory.record;
   }
 
   const fallback = createDefaultCollection();
-  const timestamp = new Date().toISOString();
-  try {
-    await env.COLLECTION.put(
-      COLLECTION_KV_KEY,
-      JSON.stringify({ ...fallback, updatedAt: timestamp })
-    );
-    return { ...fallback, updatedAt: timestamp };
-  } catch (error) {
-    console.warn("Unable to seed KV with default collection", error);
-    return { ...fallback, updatedAt: null };
+  const record = { ...fallback, updatedAt: null };
+  memory.record = record;
+  if (envMemory) {
+    envMemory.record = record;
   }
+  return record;
 };
 
 const storeCollection = async (env, payload) => {
@@ -169,13 +277,27 @@ const storeCollection = async (env, payload) => {
   const timestamp = new Date().toISOString();
   const record = { owned, wishlist, updatedAt: timestamp };
 
-  if (!env.COLLECTION) {
-    const memory = getMemoryStore();
-    memory.record = record;
-    return record;
+  const binding = resolveCollectionBinding(env);
+  const envMemory = getEnvMemoryStore(env);
+  if (binding) {
+    try {
+      await binding.put(COLLECTION_KV_KEY, JSON.stringify(record));
+    } catch (error) {
+      console.warn("Unable to persist collection to KV", error);
+    }
+  } else {
+    console.warn(
+      "Persisted collection KV binding is not configured. Data will only be cached in-memory and may be lost on deployment."
+    );
   }
 
-  await env.COLLECTION.put(COLLECTION_KV_KEY, JSON.stringify(record));
+  await writeCollectionToCache(record);
+
+  const memory = getMemoryStore();
+  memory.record = record;
+  if (envMemory) {
+    envMemory.record = record;
+  }
   return record;
 };
 
@@ -583,27 +705,54 @@ const cleanFieldValue = (value) => {
   return trimmed;
 };
 
+const normalizeLabel = (value) =>
+  value ? value.toLowerCase().replace(/\s+/g, " ").trim() : "";
+
 const extractField = (html, ...labels) => {
   if (!html) return null;
   const normalizedLabels = labels
     .filter(Boolean)
-    .map((label) => label.toLowerCase().replace(/\s+/g, " ").trim())
+    .map((label) => normalizeLabel(label))
     .filter(Boolean);
 
   if (!normalizedLabels.length) return null;
 
-  const rowRegex =
-    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi;
-  let match;
-  while ((match = rowRegex.exec(html))) {
-    const heading = cleanFieldValue(decodeHtml(match[1]));
-    if (!heading) continue;
-    const headingNormalized = heading.toLowerCase();
-    const matchesLabel = normalizedLabels.some(
-      (label) => headingNormalized === label || headingNormalized.includes(label),
+  const checkMatch = (rawHeading) => {
+    const heading = cleanFieldValue(decodeHtml(rawHeading));
+    if (!heading) return false;
+    const headingNormalized = normalizeLabel(heading);
+    return normalizedLabels.some(
+      (label) =>
+        headingNormalized === label ||
+        headingNormalized.includes(label) ||
+        label.includes(headingNormalized),
     );
-    if (!matchesLabel) continue;
-    const value = cleanFieldValue(decodeHtml(match[2]));
+  };
+
+  const extractValue = (rawValue) => cleanFieldValue(decodeHtml(rawValue));
+
+  const patterns = [
+    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
+    /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
+    /<div[^>]*class="[^"]*(?:label|header|title)[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class="[^"]*(?:value|content|data)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+  ];
+
+  for (const regex of patterns) {
+    let match;
+    while ((match = regex.exec(html))) {
+      if (!checkMatch(match[1])) continue;
+      const value = extractValue(match[2]);
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  const fallbackRegex = />([^<]+?)<\/?[^>]*>([^<]+?)</gi;
+  let match;
+  while ((match = fallbackRegex.exec(html))) {
+    if (!checkMatch(match[1])) continue;
+    const value = cleanFieldValue(match[2]);
     if (value) {
       return value;
     }
@@ -612,7 +761,114 @@ const extractField = (html, ...labels) => {
   return null;
 };
 
-const normalizeReleaseDate = (value) => {
+const decodeJsonHtmlEntities = (value) =>
+  value
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\u0026/g, "&");
+
+const parseJsonLd = (html) => {
+  const results = [];
+  const scriptRegex =
+    /<script[^>]+type\s*=\s*"application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(html))) {
+    const raw = match[1] ? decodeJsonHtmlEntities(match[1].trim()) : "";
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item) => results.push(item));
+      } else {
+        results.push(parsed);
+      }
+    } catch (error) {
+      console.warn("Unable to parse JSON-LD block", error);
+    }
+  }
+  return results;
+};
+
+const pickFirstString = (value) => {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const picked = pickFirstString(item);
+      if (picked) return picked;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    if (typeof value.name === "string") return value.name;
+    return null;
+  }
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+};
+
+const flattenToStrings = (value) => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => flattenToStrings(item));
+  }
+  if (typeof value === "object") {
+    if (typeof value.name === "string") return [value.name];
+    return [];
+  }
+  if (typeof value === "string") {
+    return [value];
+  }
+  return [];
+};
+
+const parseKeywords = (...values) => {
+  const raw = values.flatMap((value) => flattenToStrings(value));
+  return Array.from(
+    new Set(
+      raw
+        .flatMap((item) => String(item).split(/[,;\n]/))
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+};
+
+const normalizeJsonDate = (value) => {
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return normalizeReleaseDate(trimmed);
+};
+
+const parseDescriptionFields = (description) => {
+  if (!description) return {};
+  const entries = description
+    .split(/\s*[•\-|\n]\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const mapping = {};
+  for (const entry of entries) {
+    const parts = entry.split(/:\s*/);
+    if (parts.length < 2) continue;
+    const key = normalizeLabel(parts[0]);
+    const value = cleanFieldValue(parts.slice(1).join(": "));
+    if (!key || !value) continue;
+    mapping[key] = value;
+  }
+  const series = mapping["origin"] || mapping["series"] || mapping["source"] || null;
+  const manufacturer = mapping["manufacturer"] || mapping["company"] || mapping["producer"] || null;
+  const scale = mapping["scale"] || mapping["classification"] || mapping["ratio"] || null;
+  const releaseDate = normalizeReleaseDate(
+    mapping["release"] || mapping["release date"] || mapping["released"] || null,
+  );
+  return { series, manufacturer, scale, releaseDate };
+};
+
+function normalizeReleaseDate(value) {
   const cleaned = cleanFieldValue(value);
   if (!cleaned) return null;
 
@@ -654,7 +910,7 @@ const normalizeReleaseDate = (value) => {
   }
 
   return cleaned;
-};
+}
 
 const summarizeText = (value) => {
   if (!value) return null;
@@ -663,19 +919,62 @@ const summarizeText = (value) => {
   return sentence.length > 160 ? `${sentence.slice(0, 157)}…` : sentence;
 };
 
-const parseMfcHtml = (html) => {
-  const name = extractMeta(html, "property", "og:title");
-  const image = extractMeta(html, "property", "og:image");
-  const description = extractMeta(html, "property", "og:description");
-  const keywords = extractMeta(html, "name", "keywords");
+const isCloudflareChallenge = (html) => {
+  if (!html) return false;
+  const lower = html.toLowerCase();
+  if (lower.includes("just a moment") && lower.includes("cloudflare")) return true;
+  if (lower.includes("cf-error-1020") || lower.includes("cf-chl-jschl")) return true;
+  if (lower.includes("attention required")) return true;
+  return false;
+};
 
-  const series =
+const parseMfcHtml = (html) => {
+  const metaName = extractMeta(html, "property", "og:title");
+  const metaImage = extractMeta(html, "property", "og:image");
+  const metaDescription = extractMeta(html, "property", "og:description");
+  const metaKeywords = extractMeta(html, "name", "keywords");
+
+  const jsonLdEntries = parseJsonLd(html);
+  const productEntry = jsonLdEntries.find((entry) => {
+    const type = entry?.["@type"];
+    if (!type) return false;
+    if (typeof type === "string") {
+      return type.toLowerCase() === "product";
+    }
+    if (Array.isArray(type)) {
+      return type.some(
+        (item) => typeof item === "string" && item.toLowerCase() === "product",
+      );
+    }
+    return false;
+  });
+
+  const productName = pickFirstString(productEntry?.name);
+  const productImage = pickFirstString(productEntry?.image);
+  const productDescription = pickFirstString(productEntry?.description);
+  const productKeywords = productEntry?.keywords;
+  const productSeries =
+    pickFirstString(productEntry?.isRelatedTo) ||
+    pickFirstString(productEntry?.category) ||
+    pickFirstString(productEntry?.genre) ||
+    null;
+  const productManufacturer =
+    pickFirstString(productEntry?.brand) ||
+    pickFirstString(productEntry?.manufacturer) ||
+    null;
+  const productScale = pickFirstString(productEntry?.scale) || pickFirstString(productEntry?.size) || null;
+  const productRelease =
+    normalizeJsonDate(productEntry?.releaseDate) ||
+    normalizeJsonDate(productEntry?.productionDate) ||
+    normalizeJsonDate(productEntry?.offers?.releaseDate);
+
+  const htmlSeries =
     extractField(html, "Origin", "Source", "Series", "Origin of Character") ||
     extractField(html, "Character") ||
     null;
-  const manufacturer = extractField(html, "Manufacturer", "Company", "Producer");
-  const scale = extractField(html, "Scale", "Classification", "Ratio", "Size");
-  const releaseDate = normalizeReleaseDate(
+  const htmlManufacturer = extractField(html, "Manufacturer", "Company", "Producer");
+  const htmlScale = extractField(html, "Scale", "Classification", "Ratio", "Size");
+  const htmlRelease = normalizeReleaseDate(
     extractField(
       html,
       "Release",
@@ -686,22 +985,28 @@ const parseMfcHtml = (html) => {
     ),
   );
 
-  const tags = keywords
-    ? keywords
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean)
-    : [];
+  const descriptionFields = parseDescriptionFields(productDescription || metaDescription || "");
+
+  const combinedDescription = productDescription || metaDescription || null;
+  const combinedName = productName || metaName || null;
+  const combinedImage = productImage || metaImage || null;
+  const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
+  const combinedManufacturer =
+    htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
+  const combinedScale = htmlScale || productScale || descriptionFields.scale || null;
+  const combinedRelease = htmlRelease || productRelease || descriptionFields.releaseDate || null;
+
+  const tags = parseKeywords(metaKeywords, productKeywords, productEntry?.category);
 
   return {
-    name,
-    image,
-    description,
-    caption: summarizeText(description),
-    series,
-    manufacturer,
-    scale,
-    releaseDate,
+    name: combinedName,
+    image: combinedImage,
+    description: combinedDescription,
+    caption: summarizeText(combinedDescription),
+    series: combinedSeries,
+    manufacturer: combinedManufacturer,
+    scale: combinedScale,
+    releaseDate: combinedRelease,
     tags,
   };
 };
@@ -729,11 +1034,33 @@ const fetchMfcDetails = async (itemId) => {
   }
 
   const html = await response.text();
+  if (isCloudflareChallenge(html)) {
+    return {
+      error:
+        "MyFigureCollection returned a protection page. Please try again in a few moments or complete the request manually.",
+      status: 503,
+    };
+  }
+
+  const parsed = parseMfcHtml(html);
+  if (
+    !parsed ||
+    Object.values(parsed).every(
+      (value) =>
+        value === null ||
+        value === undefined ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0),
+    )
+  ) {
+    return {
+      error: "Unable to parse MyFigureCollection details from the response.",
+      status: 502,
+    };
+  }
+
   return {
-    data: {
-      ...parseMfcHtml(html),
-      links: { mfc: url },
-    },
+    data: { ...parsed, links: { mfc: url } },
   };
 };
 
