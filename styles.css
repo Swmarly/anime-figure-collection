@@ -47,7 +47,8 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg-gradient: radial-gradient(circle at 20% 20%, #201b33 0%, #251f3d 40%, #111527 100%);
+    background: radial-gradient(circle at center, rgba(255, 255, 255, 0.7), transparent 60%);
+  --bg-gradient: radial-gradient(circle at 20% 20%, #201b33 0%, #251f3d 35%, #111527 100%, #000000 100%);
   --accent-gradient: linear-gradient(135deg, #ff9de6 0%, #6d8cff 100%);
   --accent: #ff9de6;
   --accent-strong: #ffbff2;
@@ -64,6 +65,7 @@
   --card-border: rgba(143, 125, 204, 0.42);
   --card-shadow: 0 18px 38px rgba(8, 6, 20, 0.65);
   --card-shadow-hover: 0 22px 44px rgba(8, 6, 20, 0.75);
+
   --image-frame-background: linear-gradient(
     135deg,
     rgba(115, 78, 162, 0.7),
@@ -219,7 +221,7 @@ body::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.7), transparent 55%);
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.7), transparent 0%);
   pointer-events: none;
 }
 
