@@ -1227,8 +1227,12 @@ const handleLookup = async (event) => {
       console.warn("Unable to parse lookup response as JSON", parseError);
       throw new Error("Received malformed data from the server. Please try again.");
     }
-    fields.mfcId.value = itemId;
-    fields.name.value = data.name ?? fields.name.value;
+    if (fields.mfcId) {
+      fields.mfcId.value = itemId;
+    }
+    if (fields.name) {
+      fields.name.value = data.name ?? fields.name.value;
+    }
     if (fields.classification && data.classification) {
       fields.classification.value = data.classification;
     }
@@ -1264,17 +1268,23 @@ const handleLookup = async (event) => {
         fields.dimensions.value = data.dimensions.text;
       }
     }
-    fields.image.value = data.image ?? fields.image.value;
-    fields.caption.value = data.caption ?? fields.caption.value;
-    fields.description.value = data.description ?? fields.description.value;
+    if (fields.image) {
+      fields.image.value = data.image ?? fields.image.value;
+    }
+    if (fields.caption) {
+      fields.caption.value = data.caption ?? fields.caption.value;
+    }
+    if (fields.description) {
+      fields.description.value = data.description ?? fields.description.value;
+    }
 
-    if (Array.isArray(data.tags)) {
+    if (Array.isArray(data.tags) && fields.tags) {
       const existingTags = normalizeTags(fields.tags.value);
       const merged = Array.from(new Set([...existingTags, ...data.tags]));
       fields.tags.value = merged.join(", ");
     }
 
-    if (!fields.slug.value.trim()) {
+    if (fields.slug && !fields.slug.value.trim()) {
       setSlugField(slugify({ name: data.name, mfcId: itemId }), { generated: true });
     }
 
