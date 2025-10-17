@@ -694,6 +694,26 @@ const extractMeta = (html, attribute, name) => {
   return match ? decodeHtml(match[1]) : null;
 };
 
+const stripRoleSuffix = (value) => {
+  if (!value) return value;
+  const patterns = [
+    /\s+(?:as|[-–])\s+(?:manufacturer|company|producer|brand)\b.*$/i,
+    /\s+(?:as|[-–])\s+(?:product\s*line|line)\b.*$/i,
+    /\s+(?:as|[-–])\s+(?:scale|classification|ratio)\b.*$/i,
+    /\s+(?:as|[-–])\s+(?:release\s*date|release)\b.*$/i,
+    /\s+(?:as|[-–])\s+(?:series|origin|source|franchise)\b.*$/i,
+    /\s+(?:as|[-–])\s+(?:character)\b.*$/i,
+  ];
+
+  for (const pattern of patterns) {
+    if (pattern.test(value)) {
+      return value.replace(pattern, "").trim();
+    }
+  }
+
+  return value;
+};
+
 const cleanFieldValue = (value) => {
   if (!value) return null;
   const trimmed = value.replace(/\s+/g, " ").trim();
@@ -702,7 +722,7 @@ const cleanFieldValue = (value) => {
   if (normalized === "-" || normalized === "n/a" || normalized === "?" || normalized === "unknown") {
     return null;
   }
-  return trimmed;
+  return stripRoleSuffix(trimmed);
 };
 
 const normalizeLabel = (value) =>
@@ -804,10 +824,19 @@ const pickFirstString = (value) => {
     return null;
   }
   if (typeof value === "object") {
-    if (typeof value.name === "string") return value.name;
+    if (typeof value.name === "string") {
+      const cleaned = stripRoleSuffix(value.name.trim());
+      return cleaned || null;
+    }
     return null;
   }
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const cleaned = stripRoleSuffix(trimmed);
+    return cleaned || null;
+  }
+  return null;
 };
 
 const flattenToStrings = (value) => {
@@ -816,11 +845,15 @@ const flattenToStrings = (value) => {
     return value.flatMap((item) => flattenToStrings(item));
   }
   if (typeof value === "object") {
-    if (typeof value.name === "string") return [value.name];
+    if (typeof value.name === "string") {
+      const cleaned = stripRoleSuffix(value.name.trim());
+      return cleaned ? [cleaned] : [];
+    }
     return [];
   }
   if (typeof value === "string") {
-    return [value];
+    const cleaned = stripRoleSuffix(value.trim());
+    return cleaned ? [cleaned] : [];
   }
   return [];
 };
@@ -831,7 +864,7 @@ const parseKeywords = (...values) => {
     new Set(
       raw
         .flatMap((item) => String(item).split(/[,;\n]/))
-        .map((item) => item.trim())
+        .map((item) => stripRoleSuffix(item.trim()))
         .filter(Boolean),
     ),
   );
