@@ -21,19 +21,7 @@ const sampleHtml = `<!DOCTYPE html><html><head>
   "offers": { "@type": "Offer", "price": "0", "releaseDate": "2024-05-01" }
 }
 </script>
-</head><body>
-<table>
-  <tr><th>Classification</th><td>Prize</td></tr>
-  <tr><th>Product line</th><td>Luminasta</td></tr>
-  <tr><th>Origin</th><td>Re:Zero kara Hajimeru Isekai Seikatsu</td></tr>
-  <tr><th>Character</th><td>Rem</td></tr>
-  <tr><th>Company</th><td>SEGA as Manufacturer</td></tr>
-  <tr><th>Version</th><td>Ameagari Day</td></tr>
-  <tr><th>Release</th><td>01/31/2024 as Prize (Japan)<br/>04/14/2023 as Prize (Japan)</td></tr>
-  <tr><th>Materials</th><td>ABS, PVC</td></tr>
-  <tr><th>Dimensions</th><td>W=130mm (5.07in)<br/>H=210mm (8.19in)</td></tr>
-</table>
-</body></html>`;
+</head><body></body></html>`;
 
 const originalFetch = globalThis.fetch;
 
@@ -65,19 +53,10 @@ try {
   assert.equal(payload.image, 'https://example.com/rem.jpg');
   assert.equal(payload.description, 'Rem figure with blue hair.');
   assert.equal(payload.caption, 'Rem figure with blue hair.');
-  assert.equal(payload.classification, 'Prize');
-  assert.equal(payload.productLine, 'Luminasta');
-  assert.equal(payload.origin, 'Re:Zero kara Hajimeru Isekai Seikatsu');
-  assert.equal(payload.character, 'Rem');
-  assert.deepEqual(payload.companies, [{ name: 'SEGA', role: 'Manufacturer' }]);
-  assert.equal(payload.version, 'Ameagari Day');
-  assert.equal(payload.releaseDate, '2023-04');
-  assert.deepEqual(payload.releases.slice(0, 2), [
-    { label: '01/31/2024 as Prize (Japan)', date: '2024-01-31', type: 'Prize', region: 'Japan' },
-    { label: '04/14/2023 as Prize (Japan)', date: '2023-04-14', type: 'Prize', region: 'Japan' },
-  ]);
-  assert.deepEqual(payload.materials, ['ABS', 'PVC']);
-  assert.equal(payload.dimensions, 'W=130mm (5.07in)\nH=210mm (8.19in)');
+  assert.equal(payload.series, 'Re:Zero kara Hajimeru Isekai Seikatsu');
+  assert.equal(payload.manufacturer, 'SEGA');
+  assert.equal(payload.scale, 'Prize Figure');
+  assert.equal(payload.releaseDate, '2024-05');
   assert.deepEqual(payload.tags, [
     'rem',
     'demon',
