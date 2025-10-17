@@ -103,8 +103,15 @@ const compactEntry = (entry) => {
 
     if (Array.isArray(value)) {
       const items = value
-        .map((item) => (typeof item === "string" ? item.trim() : item))
-        .filter((item) => item !== undefined && item !== null && item !== "");
+        .map((item) => {
+          if (typeof item === "string") return item.trim();
+          if (item && typeof item === "object") {
+            const cleaned = compactEntry(item);
+            return cleaned && Object.keys(cleaned).length ? cleaned : null;
+          }
+          return null;
+        })
+        .filter((item) => item && (typeof item !== "string" || item));
       if (items.length || keepEmptyKeys.has(key)) {
         acc[key] = items;
       }
@@ -685,6 +692,35 @@ const decodeHtml = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const decodeHtmlLines = (value) => {
+  if (!value) return [];
+  const replaced = value
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<br\s*\/?>(?=\s*<)/gi, "<br>")
+    .replace(/<br\s*\/?/gi, "\n")
+    .replace(/<\/?p[^>]*>/gi, "\n")
+    .replace(/<\/?div[^>]*>/gi, "\n")
+    .replace(/<\/?li[^>]*>/gi, "\n")
+    .replace(/<\/?tr[^>]*>/gi, "\n")
+    .replace(/<\/?td[^>]*>/gi, "\n")
+    .replace(/<\/?th[^>]*>/gi, "\n")
+    .replace(/<\/?dd[^>]*>/gi, "\n")
+    .replace(/<\/?dt[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\r\n?/g, "\n");
+  return replaced
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*>\s*/, "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+};
+
 const extractMeta = (html, attribute, name) => {
   const regex = new RegExp(
     `<meta[^>]+${attribute}="${name}"[^>]+content="([^"]*)"[^>]*>`,
@@ -741,12 +777,14 @@ const extractField = (html, ...labels) => {
     const heading = cleanFieldValue(decodeHtml(rawHeading));
     if (!heading) return false;
     const headingNormalized = normalizeLabel(heading);
-    return normalizedLabels.some(
-      (label) =>
-        headingNormalized === label ||
-        headingNormalized.includes(label) ||
-        label.includes(headingNormalized),
-    );
+    const headingWords = headingNormalized.split(" ");
+    return normalizedLabels.some((label) => {
+      if (headingNormalized === label) return true;
+      const labelWords = label.split(" ");
+      if (headingWords.includes(label)) return true;
+      if (labelWords.includes(headingNormalized)) return true;
+      return false;
+    });
   };
 
   const extractValue = (rawValue) => cleanFieldValue(decodeHtml(rawValue));
@@ -779,6 +817,104 @@ const extractField = (html, ...labels) => {
   }
 
   return null;
+};
+
+const extractReleaseSegments = (html) => {
+  const releaseLabels = new Set([
+    "release",
+    "releases",
+    "released",
+    "release date",
+    "release dates",
+    "original release",
+    "original releases",
+  ]);
+
+  const matchHeading = (rawHeading) => {
+    const heading = cleanFieldValue(decodeHtml(rawHeading));
+    if (!heading) return null;
+    const normalized = normalizeLabel(heading);
+    return releaseLabels.has(normalized);
+  };
+
+  const patterns = [
+    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
+    /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
+  ];
+
+  for (const regex of patterns) {
+    let match;
+    while ((match = regex.exec(html))) {
+      if (!matchHeading(match[1])) continue;
+      const lines = decodeHtmlLines(match[2]);
+      if (lines.length) {
+        return lines;
+      }
+    }
+  }
+
+  const fallbackRegex = />([^<]+?)<\/?[^>]*>([^<]+?)</gi;
+  let match;
+  while ((match = fallbackRegex.exec(html))) {
+    if (!matchHeading(match[1])) continue;
+    const lines = decodeHtmlLines(match[2]);
+    if (lines.length) {
+      return lines;
+    }
+  }
+
+  return [];
+};
+
+const extractFieldSegments = (html, ...labels) => {
+  if (!html) return [];
+  const normalizedLabels = labels
+    .filter(Boolean)
+    .map((label) => normalizeLabel(label))
+    .filter(Boolean);
+
+  if (!normalizedLabels.length) return [];
+
+  const checkMatch = (rawHeading) => {
+    const heading = cleanFieldValue(decodeHtml(rawHeading));
+    if (!heading) return false;
+    const headingNormalized = normalizeLabel(heading);
+    return normalizedLabels.some(
+      (label) =>
+        headingNormalized === label ||
+        headingNormalized.includes(label) ||
+        label.includes(headingNormalized),
+    );
+  };
+
+  const patterns = [
+    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
+    /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
+    /<div[^>]*class="[^"]*(?:label|header|title)[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class="[^"]*(?:value|content|data)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+  ];
+
+  for (const regex of patterns) {
+    let match;
+    while ((match = regex.exec(html))) {
+      if (!checkMatch(match[1])) continue;
+      const lines = decodeHtmlLines(match[2]);
+      if (lines.length) {
+        return lines;
+      }
+    }
+  }
+
+  const fallbackRegex = />([^<]+?)<\/?[^>]*>([^<]+?)</gi;
+  let match;
+  while ((match = fallbackRegex.exec(html))) {
+    if (!checkMatch(match[1])) continue;
+    const lines = decodeHtmlLines(match[2]);
+    if (lines.length) {
+      return lines;
+    }
+  }
+
+  return [];
 };
 
 const decodeJsonHtmlEntities = (value) =>
@@ -858,6 +994,25 @@ const flattenToStrings = (value) => {
   return [];
 };
 
+const flattenNames = (value) => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => flattenNames(item));
+  }
+  if (typeof value === "object") {
+    if (typeof value.name === "string") {
+      const trimmed = value.name.trim();
+      return trimmed ? [trimmed] : [];
+    }
+    return [];
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return [];
+};
+
 const parseKeywords = (...values) => {
   const raw = values.flatMap((value) => flattenToStrings(value));
   return Array.from(
@@ -868,6 +1023,151 @@ const parseKeywords = (...values) => {
         .filter(Boolean),
     ),
   );
+};
+
+const parseCompanyEntries = (segments = []) => {
+  const results = segments
+    .map((segment) => {
+      if (!segment) return null;
+      const text = String(segment).replace(/\s+/g, " ").trim();
+      if (!text) return null;
+      let name = text;
+      let role = null;
+      const parenMatch = text.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+      if (parenMatch) {
+        name = parenMatch[1].trim();
+        role = parenMatch[2].trim();
+      } else {
+        const asMatch = text.match(/^(.*?)\s*(?:-|–|—|as)\s+(.+)$/i);
+        if (asMatch) {
+          name = asMatch[1].trim();
+          role = asMatch[2].trim();
+        }
+      }
+      if (!name) return null;
+      return { name, role: role || null };
+    })
+    .filter(Boolean);
+
+  const unique = new Map();
+  results.forEach((entry) => {
+    const key = `${entry.name.toLowerCase()}::${(entry.role || "").toLowerCase()}`;
+    if (!unique.has(key)) {
+      unique.set(key, entry);
+    }
+  });
+
+  return Array.from(unique.values());
+};
+
+const normalizeReleaseEntryDate = (value) => {
+  if (!value) return null;
+  const cleaned = value.replace(/[.]/g, "-").replace(/\//g, "-").trim();
+  let match = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  match = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (match) {
+    const [, month, day, year] = match;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  match = cleaned.match(/^(\d{4})-(\d{1,2})$/);
+  if (match) {
+    const [, year, month] = match;
+    return `${year}-${month.padStart(2, "0")}`;
+  }
+  match = cleaned.match(/^(\d{4})$/);
+  if (match) {
+    return match[1];
+  }
+  const fallback = normalizeReleaseDate(value);
+  if (fallback) return fallback;
+  return null;
+};
+
+const parseReleaseEntry = (value) => {
+  if (!value) return null;
+  const label = cleanFieldValue(value);
+  if (!label) return null;
+  const normalizedLabel = label.replace(/[•·]/g, " ").replace(/\s+/g, " ").trim();
+  const dateMatch = normalizedLabel.match(
+    /(\d{4}[/-]\d{1,2}(?:[/-]\d{1,2})?|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4})/,
+  );
+  const rawDate = dateMatch ? dateMatch[1] : null;
+  let remainder = normalizedLabel;
+  if (rawDate) {
+    remainder = remainder.replace(rawDate, " ").trim();
+  }
+  let region = null;
+  const regionMatch = remainder.match(/\(([^)]+)\)\s*$/);
+  if (regionMatch) {
+    region = regionMatch[1].trim() || null;
+    remainder = remainder.slice(0, regionMatch.index).trim();
+  }
+  let type = null;
+  const typeMatch = remainder.match(/(?:as|[-–—])\s*([^()]+)$/i);
+  if (typeMatch) {
+    type = typeMatch[1].trim() || null;
+    remainder = remainder.slice(0, typeMatch.index).trim();
+  }
+  if (!type && remainder) {
+    type = remainder.trim();
+  }
+  return {
+    label: normalizedLabel,
+    date: normalizeReleaseEntryDate(rawDate),
+    type: type || null,
+    region,
+  };
+};
+
+const parseReleaseEntries = (segments = []) => {
+  const entries = segments
+    .flatMap((segment) => (Array.isArray(segment) ? segment : [segment]))
+    .map((segment) => parseReleaseEntry(segment))
+    .filter(Boolean);
+
+  const unique = new Map();
+  entries.forEach((entry) => {
+    const key = entry.label.toLowerCase();
+    if (!unique.has(key)) {
+      unique.set(key, entry);
+    }
+  });
+  return Array.from(unique.values());
+};
+
+const parseMaterialEntries = (segments = []) => {
+  const values = segments
+    .flatMap((segment) => {
+      if (!segment) return [];
+      return String(segment).split(/[,•]/);
+    })
+    .map((item) => cleanFieldValue(item))
+    .filter(Boolean);
+  return Array.from(new Set(values));
+};
+
+const parseDimensionEntries = (segments = []) => {
+  if (!Array.isArray(segments) || !segments.length) return null;
+  const joined = segments.join("\n").replace(/\s+\n/g, "\n").trim();
+  return joined || null;
+};
+
+const derivePrimaryReleaseDate = (releases = []) => {
+  if (!Array.isArray(releases) || !releases.length) return null;
+  const dates = releases
+    .map((release) => release && release.date)
+    .filter(Boolean)
+    .sort();
+  if (!dates.length) return null;
+  const first = dates[0];
+  if (first.length === 10) {
+    return first.slice(0, 7);
+  }
+  return first;
 };
 
 const normalizeJsonDate = (value) => {
@@ -892,13 +1192,27 @@ const parseDescriptionFields = (description) => {
     if (!key || !value) continue;
     mapping[key] = value;
   }
-  const series = mapping["origin"] || mapping["series"] || mapping["source"] || null;
-  const manufacturer = mapping["manufacturer"] || mapping["company"] || mapping["producer"] || null;
-  const scale = mapping["scale"] || mapping["classification"] || mapping["ratio"] || null;
+  const origin =
+    mapping["origin"] || mapping["series"] || mapping["source"] || mapping["franchise"] || null;
+  const character = mapping["character"] || mapping["hero"] || mapping["figure"] || null;
+  const classification = mapping["classification"] || mapping["class"] || mapping["type"] || null;
+  const productLine =
+    mapping["product line"] || mapping["product-line"] || mapping["line"] || null;
+  const version = mapping["version"] || mapping["variant"] || null;
+  const materials = parseMaterialEntries([
+    mapping["material"],
+    mapping["materials"],
+    mapping["composition"],
+  ]);
+  const dimensions = parseDimensionEntries([
+    mapping["dimensions"],
+    mapping["dimension"],
+    mapping["size"],
+  ]);
   const releaseDate = normalizeReleaseDate(
     mapping["release"] || mapping["release date"] || mapping["released"] || null,
   );
-  return { series, manufacturer, scale, releaseDate };
+  return { origin, character, classification, productLine, version, materials, dimensions, releaseDate };
 };
 
 function normalizeReleaseDate(value) {
@@ -986,48 +1300,100 @@ const parseMfcHtml = (html) => {
   const productImage = pickFirstString(productEntry?.image);
   const productDescription = pickFirstString(productEntry?.description);
   const productKeywords = productEntry?.keywords;
-  const productSeries =
+  const productOrigin =
     pickFirstString(productEntry?.isRelatedTo) ||
-    pickFirstString(productEntry?.category) ||
     pickFirstString(productEntry?.genre) ||
     null;
-  const productManufacturer =
-    pickFirstString(productEntry?.brand) ||
-    pickFirstString(productEntry?.manufacturer) ||
-    null;
-  const productScale = pickFirstString(productEntry?.scale) || pickFirstString(productEntry?.size) || null;
+  const productCharacter = pickFirstString(productEntry?.character);
+  const productClassification =
+    pickFirstString(productEntry?.category) || pickFirstString(productEntry?.scale) || null;
+  const productLine = pickFirstString(productEntry?.model);
+  const productVersion = pickFirstString(productEntry?.alternateName);
   const productRelease =
     normalizeJsonDate(productEntry?.releaseDate) ||
     normalizeJsonDate(productEntry?.productionDate) ||
     normalizeJsonDate(productEntry?.offers?.releaseDate);
 
-  const htmlSeries =
-    extractField(html, "Origin", "Source", "Series", "Origin of Character") ||
-    extractField(html, "Character") ||
-    null;
-  const htmlManufacturer = extractField(html, "Manufacturer", "Company", "Producer");
-  const htmlScale = extractField(html, "Scale", "Classification", "Ratio", "Size");
-  const htmlRelease = normalizeReleaseDate(
-    extractField(
-      html,
-      "Release",
-      "Released",
-      "Release Date",
-      "Release date",
-      "Original release",
-    ),
-  );
+  const htmlClassification = extractField(html, "Classification", "Class");
+  const htmlProductLine = extractField(html, "Product line", "Product-line", "Line");
+  const htmlOrigin = extractField(html, "Origin", "Source", "Origin of Character", "Franchise");
+  const htmlCharacter = extractField(html, "Character");
+  const htmlVersion = extractField(html, "Version", "Variant");
+  const htmlCompanySegments = extractFieldSegments(html, "Company", "Manufacturer", "Producer", "Brand");
+  const htmlReleaseSegments = extractReleaseSegments(html);
+  const htmlMaterialSegments = extractFieldSegments(html, "Material", "Materials", "Composition");
+  const htmlDimensionSegments = extractFieldSegments(html, "Dimensions", "Dimension", "Size");
 
   const descriptionFields = parseDescriptionFields(productDescription || metaDescription || "");
 
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
   const combinedImage = productImage || metaImage || null;
-  const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
-  const combinedManufacturer =
-    htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
-  const combinedScale = htmlScale || productScale || descriptionFields.scale || null;
-  const combinedRelease = htmlRelease || productRelease || descriptionFields.releaseDate || null;
+
+  const companies = parseCompanyEntries([
+    ...htmlCompanySegments,
+    ...flattenNames(productEntry?.brand),
+    ...flattenNames(productEntry?.manufacturer),
+  ]);
+
+  const releases = parseReleaseEntries(htmlReleaseSegments);
+  if (productRelease) {
+    releases.push({
+      label: productRelease,
+      date: normalizeReleaseEntryDate(productRelease),
+      type: null,
+      region: null,
+    });
+  }
+  if (descriptionFields.releaseDate) {
+    releases.push({
+      label: descriptionFields.releaseDate,
+      date: normalizeReleaseEntryDate(descriptionFields.releaseDate),
+      type: null,
+      region: null,
+    });
+  }
+  const uniqueReleases = [];
+  const releaseKeys = new Set();
+  releases.forEach((release) => {
+    if (!release) return;
+    const label = release.label?.trim();
+    if (!label && !release.date) return;
+    const key = `${(label || "").toLowerCase()}::${release.date || ""}`;
+    if (releaseKeys.has(key)) return;
+    releaseKeys.add(key);
+    uniqueReleases.push({
+      label: label || release.date || null,
+      date: release.date || null,
+      type: release.type || null,
+      region: release.region || null,
+    });
+  });
+
+  const materials = Array.from(
+    new Set([
+      ...parseMaterialEntries(htmlMaterialSegments),
+      ...descriptionFields.materials,
+      ...flattenToStrings(productEntry?.material),
+    ].filter(Boolean)),
+  );
+
+  const combinedDimensions =
+    parseDimensionEntries(htmlDimensionSegments) ||
+    descriptionFields.dimensions ||
+    null;
+
+  const combinedClassification =
+    htmlClassification ||
+    descriptionFields.classification ||
+    productClassification ||
+    null;
+  const combinedProductLine = htmlProductLine || descriptionFields.productLine || productLine || null;
+  const combinedOrigin = htmlOrigin || descriptionFields.origin || productOrigin || null;
+  const combinedCharacter = htmlCharacter || descriptionFields.character || productCharacter || null;
+  const combinedVersion = htmlVersion || descriptionFields.version || productVersion || null;
+
+  const releaseDate = derivePrimaryReleaseDate(uniqueReleases);
 
   const tags = parseKeywords(metaKeywords, productKeywords, productEntry?.category);
 
@@ -1036,10 +1402,16 @@ const parseMfcHtml = (html) => {
     image: combinedImage,
     description: combinedDescription,
     caption: summarizeText(combinedDescription),
-    series: combinedSeries,
-    manufacturer: combinedManufacturer,
-    scale: combinedScale,
-    releaseDate: combinedRelease,
+    classification: combinedClassification,
+    productLine: combinedProductLine,
+    origin: combinedOrigin,
+    character: combinedCharacter,
+    companies,
+    version: combinedVersion,
+    releases: uniqueReleases,
+    releaseDate: releaseDate || productRelease || descriptionFields.releaseDate || null,
+    materials,
+    dimensions: combinedDimensions,
     tags,
   };
 };

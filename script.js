@@ -29,7 +29,91 @@ const themeToggle = document.querySelector("[data-theme-toggle]");
 const themeToggleIcon = themeToggle?.querySelector("[data-theme-toggle-icon]");
 const themeToggleText = themeToggle?.querySelector("[data-theme-toggle-text]");
 
-const releaseValue = (figure) => figure.releaseDate ?? "";
+const monthNames = {
+  january: "01",
+  jan: "01",
+  february: "02",
+  feb: "02",
+  march: "03",
+  mar: "03",
+  april: "04",
+  apr: "04",
+  may: "05",
+  june: "06",
+  jun: "06",
+  july: "07",
+  jul: "07",
+  august: "08",
+  aug: "08",
+  september: "09",
+  sep: "09",
+  sept: "09",
+  october: "10",
+  oct: "10",
+  november: "11",
+  nov: "11",
+  december: "12",
+  dec: "12",
+};
+
+const normalizeReleaseSortKey = (value) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const isoMatch = text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const [, year, month] = isoMatch;
+    return `${year}-${month.padStart(2, "0")}`;
+  }
+  const yMonthMatch = text.match(/(\d{4})[\/-](\d{1,2})/);
+  if (yMonthMatch) {
+    const [, year, month] = yMonthMatch;
+    return `${year}-${month.padStart(2, "0")}`;
+  }
+  const dmyMatch = text.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+  if (dmyMatch) {
+    const [, , month, year] = dmyMatch;
+    return `${year}-${month.padStart(2, "0")}`;
+  }
+  const monthNameMatch = text.match(
+    /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)/i,
+  );
+  if (monthNameMatch) {
+    const month = monthNames[monthNameMatch[1].toLowerCase()];
+    const yearMatch = text.match(/(\d{4})/);
+    if (month && yearMatch) {
+      return `${yearMatch[1]}-${month}`;
+    }
+  }
+  const yearOnlyMatch = text.match(/(\d{4})/);
+  if (yearOnlyMatch) {
+    return yearOnlyMatch[1];
+  }
+  return null;
+};
+
+const releaseValue = (figure) => {
+  if (figure?.releaseDate) return figure.releaseDate;
+  if (Array.isArray(figure?.releases)) {
+    const keys = figure.releases
+      .map((release) => {
+        if (!release) return null;
+        if (typeof release === "string") {
+          return normalizeReleaseSortKey(release);
+        }
+        return (
+          normalizeReleaseSortKey(release.date) ||
+          normalizeReleaseSortKey(release.label)
+        );
+      })
+      .filter(Boolean)
+      .sort();
+    if (keys.length) {
+      return keys[0];
+    }
+  }
+  return "";
+};
 
 const sorters = {
   "release-desc": (a, b) => (releaseValue(a) < releaseValue(b) ? 1 : -1),
@@ -48,14 +132,6 @@ const applyCollection = (collection) => {
 
   figures = owned.map((item) => ({ ...item }));
   wishlist = wished.map((item) => ({ ...item }));
-};
-
-const formatRelease = (value) => {
-  if (!value) return "TBA";
-  if (!value.includes("-")) return value;
-  const [year, month] = value.split("-");
-  const date = new Date(Number(year), Number(month) - 1);
-  return date.toLocaleString(undefined, { month: "long", year: "numeric" });
 };
 
 const createCard = (item) => {
@@ -84,10 +160,162 @@ const createCard = (item) => {
   }
 
   card.querySelector(".figure-card__name").textContent = item.name;
-  card.querySelector(".figure-card__series").textContent = item.series;
-  card.querySelector(".figure-card__manufacturer").textContent = item.manufacturer;
-  card.querySelector(".figure-card__scale").textContent = item.scale;
-  card.querySelector(".figure-card__release").textContent = formatRelease(item.releaseDate);
+
+  const originText = item.origin || item.series || "";
+  const originEl = card.querySelector(".figure-card__origin");
+  if (originEl) {
+    if (originText) {
+      originEl.textContent = originText;
+      originEl.hidden = false;
+    } else {
+      originEl.hidden = true;
+    }
+  }
+
+  const detailRenderers = {
+    classification: (value) => {
+      const block = card.querySelector('[data-detail="classification"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__classification").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+    productLine: (value) => {
+      const block = card.querySelector('[data-detail="product-line"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__product-line").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+    character: (value) => {
+      const block = card.querySelector('[data-detail="character"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__character").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+    version: (value) => {
+      const block = card.querySelector('[data-detail="version"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__version").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+    materials: (value) => {
+      const block = card.querySelector('[data-detail="materials"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__materials").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+    dimensions: (value) => {
+      const block = card.querySelector('[data-detail="dimensions"]');
+      if (!block) return;
+      if (value) {
+        block.querySelector(".figure-card__dimensions").textContent = value;
+        block.hidden = false;
+      } else {
+        block.hidden = true;
+      }
+    },
+  };
+
+  detailRenderers.classification(item.classification);
+  detailRenderers.productLine(item.productLine);
+  detailRenderers.character(item.character);
+  detailRenderers.version(item.version);
+
+  const materialsValue = Array.isArray(item.materials)
+    ? item.materials.join(", ")
+    : item.materials ?? "";
+  detailRenderers.materials(materialsValue);
+
+  const dimensionsValue = typeof item.dimensions === "string"
+    ? item.dimensions
+    : Array.isArray(item.dimensions)
+    ? item.dimensions.join("\n")
+    : item.dimensions?.text ?? "";
+  detailRenderers.dimensions(dimensionsValue);
+
+  const companiesBlock = card.querySelector('[data-detail="companies"]');
+  const companiesList = card.querySelector(".figure-card__companies");
+  if (companiesBlock && companiesList) {
+    companiesList.innerHTML = "";
+    const companies = Array.isArray(item.companies)
+      ? item.companies
+      : item.manufacturer
+      ? [{ name: item.manufacturer }]
+      : [];
+    const formatted = companies
+      .map((company) => {
+        if (!company) return null;
+        if (typeof company === "string") return company.trim();
+        const name = company.name ? String(company.name).trim() : "";
+        const role = company.role ? String(company.role).trim() : "";
+        if (!name && !role) return null;
+        return role ? `${name} (${role})` : name;
+      })
+      .filter(Boolean);
+    if (formatted.length) {
+      formatted.forEach((entry) => {
+        const li = document.createElement("li");
+        li.textContent = entry;
+        companiesList.append(li);
+      });
+      companiesBlock.hidden = false;
+    } else {
+      companiesBlock.hidden = true;
+    }
+  }
+
+  const releasesBlock = card.querySelector('[data-detail="releases"]');
+  const releasesList = card.querySelector(".figure-card__releases");
+  if (releasesBlock && releasesList) {
+    releasesList.innerHTML = "";
+    const rawReleases = Array.isArray(item.releases) ? item.releases : [];
+    const releases = rawReleases.length
+      ? rawReleases
+      : item.releaseDate
+      ? [{ label: item.releaseDate, date: item.releaseDate }]
+      : [];
+    const formatted = releases
+      .map((release) => {
+        if (!release) return null;
+        if (typeof release === "string") return release.trim();
+        if (release.label) return release.label.trim();
+        const pieces = [];
+        if (release.date) pieces.push(release.date);
+        if (release.type) pieces.push(release.type);
+        if (release.region) pieces.push(`(${release.region})`);
+        return pieces.join(" ").trim() || null;
+      })
+      .filter(Boolean);
+    if (formatted.length) {
+      formatted.forEach((entry) => {
+        const li = document.createElement("li");
+        li.textContent = entry;
+        releasesList.append(li);
+      });
+      releasesBlock.hidden = false;
+    } else {
+      releasesBlock.hidden = true;
+    }
+  }
 
   if (item.description) {
     descriptionEl.textContent = item.description;

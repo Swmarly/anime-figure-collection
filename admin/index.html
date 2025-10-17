@@ -100,25 +100,64 @@
               <input class="field__input" id="figure-name" name="name" required />
             </label>
             <label class="field">
-              <span class="field__label">Series / Origin</span>
-              <input class="field__input" id="figure-series" name="series" />
+              <span class="field__label">Classification</span>
+              <input class="field__input" id="figure-classification" name="classification" />
             </label>
             <label class="field">
-              <span class="field__label">Manufacturer</span>
-              <input class="field__input" id="figure-manufacturer" name="manufacturer" />
+              <span class="field__label">Product line</span>
+              <input class="field__input" id="figure-product-line" name="productLine" />
             </label>
             <label class="field">
-              <span class="field__label">Scale</span>
-              <input class="field__input" id="figure-scale" name="scale" />
+              <span class="field__label">Origin</span>
+              <input class="field__input" id="figure-origin" name="origin" />
             </label>
             <label class="field">
-              <span class="field__label">Release date</span>
+              <span class="field__label">Character</span>
+              <input class="field__input" id="figure-character" name="character" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Companies</span>
+              <textarea
+                class="field__input"
+                id="figure-companies"
+                name="companies"
+                rows="3"
+                placeholder="One per line, e.g. SEGA as Manufacturer"
+              ></textarea>
+            </label>
+            <label class="field">
+              <span class="field__label">Version</span>
+              <input class="field__input" id="figure-version" name="version" />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Releases</span>
+              <textarea
+                class="field__input"
+                id="figure-releases"
+                name="releases"
+                rows="3"
+                placeholder="YYYY-MM-DD as Prize (Japan)"
+              ></textarea>
+              <span class="field__hint">Enter one release per line. Dates can be YYYY-MM or YYYY-MM-DD.</span>
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Materials</span>
               <input
                 class="field__input"
-                id="figure-release"
-                name="releaseDate"
-                placeholder="YYYY-MM"
+                id="figure-materials"
+                name="materials"
+                placeholder="ABS, PVC"
               />
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Dimensions</span>
+              <textarea
+                class="field__input"
+                id="figure-dimensions"
+                name="dimensions"
+                rows="2"
+                placeholder="W=130mm (5.07in)\nH=210mm (8.19in)"
+              ></textarea>
             </label>
             <label class="field field--full">
               <span class="field__label">Image URL</span>
