@@ -20,4 +20,4 @@ This repository exists primarily as a public demo for friends who like anime fig
 - Cloudflare Workers for hosting, API routing, and Basic Auth
 - Cloudflare KV (optional) for persistence
 
-Feel free to explore the code, borrow patterns, or fork it for your own display case. Just remember that the live demo uses sample credentials meant for local testing—always replace secrets if you deploy a copy.
+Feel free to explore the code, borrow patterns, or fork it for your own display case. Just remember that the live demo uses sample credentials meant for local testing. Always replace secrets if you deploy a copy.
