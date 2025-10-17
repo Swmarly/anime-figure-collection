@@ -83,18 +83,10 @@ Each figure stored in the collection (within the `owned` or `wishlist` arrays) c
 {
   id: "unique-id", // used internally for sorting and anchors
   name: "Display Name",
-  classification: "Prize",
-  productLine: "Luminasta",
-  origin: "Series or franchise",
-  character: "Character name",
-  companies: [{ name: "SEGA", role: "Manufacturer" }],
-  version: "Variant name",
-  releases: [
-    { label: "01/31/2024 as Prize (Japan)", date: "2024-01-31", type: "Prize", region: "Japan" },
-  ],
-  releaseDate: "YYYY-MM", // derived automatically from releases when possible
-  materials: ["ABS", "PVC"],
-  dimensions: "W=130mm (5.07in)\nH=210mm (8.19in)",
+  series: "Series or franchise",
+  manufacturer: "Manufacturer name",
+  scale: "e.g. 1/7 Scale PVC",
+  releaseDate: "YYYY-MM", // used for sorting and display
   image: "https://your-image-url.jpg", // can be local or remote
   caption: "Short alt-style caption shown under the image",
   tags: ["Tag one", "Tag two"],

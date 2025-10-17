@@ -24,15 +24,10 @@ const fields = {
   slug: field("figure-slug"),
   mfcId: field("figure-mfc-id"),
   name: field("figure-name"),
-  classification: field("figure-classification"),
-  productLine: field("figure-product-line"),
-  origin: field("figure-origin"),
-  character: field("figure-character"),
-  companies: field("figure-companies"),
-  version: field("figure-version"),
-  releases: field("figure-releases"),
-  materials: field("figure-materials"),
-  dimensions: field("figure-dimensions"),
+  series: field("figure-series"),
+  manufacturer: field("figure-manufacturer"),
+  scale: field("figure-scale"),
+  releaseDate: field("figure-release"),
   image: field("figure-image"),
   caption: field("figure-caption"),
   description: field("figure-description"),
@@ -216,15 +211,6 @@ const sortEntries = (entries = []) =>
 
 const formatListName = (list) => (list === "wishlist" ? "Wishlist" : "Owned");
 
-const findEditingEntry = () => {
-  if (!state.editing || !state.editing.list) return null;
-  const collection = state.collection?.[state.editing.list];
-  if (!Array.isArray(collection)) return null;
-  return (
-    collection.find((item) => identityMatches(item, state.editing)) || null
-  );
-};
-
 const normalizeTags = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -236,190 +222,6 @@ const normalizeTags = (value) => {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
-};
-
-const splitLines = (value) =>
-  String(value)
-    .split(/\r?\n|[•;]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const parseCompaniesField = (value) => {
-  if (!value) return [];
-  const lines = Array.isArray(value) ? value : splitLines(value);
-  const entries = lines
-    .map((line) => {
-      const trimmed = String(line).trim();
-      if (!trimmed) return null;
-      let name = trimmed;
-      let role = null;
-      const parenMatch = trimmed.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
-      if (parenMatch) {
-        name = parenMatch[1].trim();
-        role = parenMatch[2].trim();
-      } else {
-        const asMatch = trimmed.match(/^(.*?)\s*(?:-|–|—|as)\s+(.+)$/i);
-        if (asMatch) {
-          name = asMatch[1].trim();
-          role = asMatch[2].trim();
-        }
-      }
-      if (!name) return null;
-      return { name, role: role || null };
-    })
-    .filter(Boolean);
-  const unique = new Map();
-  entries.forEach((entry) => {
-    const key = `${entry.name.toLowerCase()}::${(entry.role || "").toLowerCase()}`;
-    if (!unique.has(key)) {
-      unique.set(key, entry);
-    }
-  });
-  return Array.from(unique.values());
-};
-
-const formatCompaniesField = (companies) => {
-  if (!Array.isArray(companies)) return "";
-  return companies
-    .map((company) => {
-      if (!company || typeof company !== "object") return "";
-      const name = String(company.name || "").trim();
-      const role = company.role ? String(company.role).trim() : "";
-      if (!name && !role) return "";
-      return role ? `${name} as ${role}`.trim() : name;
-    })
-    .filter(Boolean)
-    .join("\n");
-};
-
-const parseMaterialsField = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-  return String(value)
-    .split(/[,•]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
-const parseDimensionsField = (value) => {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || null;
-  }
-  if (Array.isArray(value)) {
-    const joined = value.map((item) => String(item).trim()).filter(Boolean).join("\n");
-    return joined || null;
-  }
-  if (value && typeof value === "object" && value.text) {
-    const trimmed = String(value.text).trim();
-    return trimmed || null;
-  }
-  return null;
-};
-
-const parseReleaseLine = (line) => {
-  const text = String(line).trim();
-  if (!text) return null;
-  const dateMatch = text.match(/(\d{4}[./-]\d{1,2}(?:[./-]\d{1,2})?|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4})/);
-  const rawDate = dateMatch ? dateMatch[1] : null;
-  const normalizeDate = (value) => {
-    if (!value) return null;
-    const cleaned = value.replace(/[.]/g, "-").replace(/\//g, "-");
-    let match = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (match) {
-      const [, year, month, day] = match;
-      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-    }
-    match = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (match) {
-      const [, month, day, year] = match;
-      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-    }
-    match = cleaned.match(/^(\d{4})-(\d{1,2})$/);
-    if (match) {
-      const [, year, month] = match;
-      return `${year}-${month.padStart(2, "0")}`;
-    }
-    match = cleaned.match(/^(\d{4})$/);
-    if (match) {
-      return match[1];
-    }
-    return null;
-  };
-  let remainder = text;
-  if (rawDate) {
-    remainder = remainder.replace(rawDate, " ").trim();
-  }
-  let region = null;
-  const regionMatch = remainder.match(/\(([^)]+)\)\s*$/);
-  if (regionMatch) {
-    region = regionMatch[1].trim() || null;
-    remainder = remainder.slice(0, regionMatch.index).trim();
-  }
-  let type = null;
-  const typeMatch = remainder.match(/(?:as|[-–—])\s*([^()]+)$/i);
-  if (typeMatch) {
-    type = typeMatch[1].trim() || null;
-    remainder = remainder.slice(0, typeMatch.index).trim();
-  }
-  if (!type && remainder) {
-    type = remainder.trim();
-    remainder = "";
-  }
-  return {
-    label: text,
-    date: normalizeDate(rawDate),
-    type: type || null,
-    region,
-  };
-};
-
-const parseReleasesField = (value) => {
-  if (!value) return [];
-  const lines = Array.isArray(value) ? value : splitLines(value);
-  return lines
-    .map((line) => parseReleaseLine(line))
-    .filter(Boolean);
-};
-
-const formatReleasesField = (releases) => {
-  if (!Array.isArray(releases)) return "";
-  return releases
-    .map((release) => {
-      if (!release) return "";
-      if (typeof release === "string") return release.trim();
-      if (release.label) return release.label.trim();
-      const parts = [];
-      if (release.date) parts.push(release.date);
-      if (release.type) parts.push(release.type);
-      if (release.region) parts.push(`(${release.region})`);
-      return parts.join(" ").trim();
-    })
-    .filter(Boolean)
-    .join("\n");
-};
-
-const deriveReleaseDate = (releases) => {
-  if (!Array.isArray(releases)) return null;
-  const normalized = releases
-    .map((release) => {
-      if (!release) return null;
-      if (typeof release === "string") {
-        const parsed = parseReleaseLine(release);
-        return parsed?.date || null;
-      }
-      return release.date || null;
-    })
-    .filter(Boolean)
-    .sort();
-  if (!normalized.length) return null;
-  const first = normalized[0];
-  if (first.length === 10) {
-    return first.slice(0, 7);
-  }
-  return first;
 };
 
 const compactEntry = (entry) => {
@@ -441,26 +243,9 @@ const compactEntry = (entry) => {
     }
 
     if (Array.isArray(value)) {
-      const items = value
-        .map((item) => {
-          if (typeof item === "string") return item.trim();
-          if (item && typeof item === "object") {
-            const cleaned = compactEntry(item);
-            return cleaned && Object.keys(cleaned).length ? cleaned : null;
-          }
-          return null;
-        })
-        .filter((item) => item && (typeof item !== "string" || item));
+      const items = value.map((item) => String(item).trim()).filter(Boolean);
       if (items.length || keepEmpty.has(key)) {
         acc[key] = items;
-      }
-      return acc;
-    }
-
-    if (typeof value === "object") {
-      const nested = compactEntry(value);
-      if (nested && Object.keys(nested).length) {
-        acc[key] = nested;
       }
       return acc;
     }
@@ -482,33 +267,14 @@ const readForm = () => {
   const mfcIdRaw = fields.mfcId.value.trim();
   const mfcId = mfcIdRaw ? Number(mfcIdRaw) : null;
 
-  const companies = parseCompaniesField(fields.companies?.value ?? "");
-  const releases = parseReleasesField(fields.releases?.value ?? "");
-  const materials = parseMaterialsField(fields.materials?.value ?? "");
-  const dimensions = parseDimensionsField(fields.dimensions?.value ?? "");
-
-  let releaseDate = deriveReleaseDate(releases);
-  if (!releaseDate && releases.length === 0) {
-    const editingEntry = findEditingEntry();
-    if (editingEntry && editingEntry.releaseDate) {
-      releaseDate = editingEntry.releaseDate;
-    }
-  }
-
   const entry = {
     slug,
     mfcId: Number.isFinite(mfcId) ? mfcId : null,
     name,
-    classification: fields.classification?.value ?? "",
-    productLine: fields.productLine?.value ?? "",
-    origin: fields.origin?.value ?? "",
-    character: fields.character?.value ?? "",
-    companies,
-    version: fields.version?.value ?? "",
-    releases,
-    releaseDate,
-    materials,
-    dimensions,
+    series: fields.series.value,
+    manufacturer: fields.manufacturer.value,
+    scale: fields.scale.value,
+    releaseDate: fields.releaseDate.value,
     image: fields.image.value,
     caption: fields.caption.value,
     description: fields.description.value,
@@ -715,14 +481,8 @@ const renderManagerSection = (title, listKey, items = []) => {
       if (entry.mfcId) {
         metaParts.push(`MFC: <code>${escapeHtml(String(entry.mfcId))}</code>`);
       }
-      if (entry.origin) {
-        metaParts.push(escapeHtml(entry.origin));
-      }
-      if (entry.classification) {
-        metaParts.push(escapeHtml(entry.classification));
-      }
-      if (!entry.origin && entry.character) {
-        metaParts.push(escapeHtml(entry.character));
+      if (entry.series) {
+        metaParts.push(escapeHtml(entry.series));
       }
       const meta = metaParts.length
         ? `<div class="manager__meta">${metaParts.join(" · ")}</div>`
@@ -848,63 +608,20 @@ const applyEntryToForm = (entry = {}) => {
   } else {
     setSlugField("", { generated: true });
   }
-  if (fields.mfcId) fields.mfcId.value = entry.mfcId ?? "";
-  if (fields.name) fields.name.value = entry.name ?? "";
-  if (fields.classification) {
-    fields.classification.value = entry.classification ?? "";
-  }
-  if (fields.productLine) {
-    fields.productLine.value = entry.productLine ?? "";
-  }
-  if (fields.origin) {
-    fields.origin.value = entry.origin ?? "";
-  }
-  if (fields.character) {
-    fields.character.value = entry.character ?? "";
-  }
-  if (fields.companies) {
-    fields.companies.value = formatCompaniesField(entry.companies);
-  }
-  if (fields.version) {
-    fields.version.value = entry.version ?? "";
-  }
-  if (fields.releases) {
-    fields.releases.value = formatReleasesField(entry.releases);
-  }
-  if (fields.materials) {
-    const materials = Array.isArray(entry.materials)
-      ? entry.materials.join(", ")
-      : entry.materials ?? "";
-    fields.materials.value = materials;
-  }
-  if (fields.dimensions) {
-    const dimensions = typeof entry.dimensions === "string"
-      ? entry.dimensions
-      : Array.isArray(entry.dimensions)
-      ? entry.dimensions.join("\n")
-      : entry.dimensions?.text ?? "";
-    fields.dimensions.value = dimensions;
-  }
-  if (fields.image) fields.image.value = entry.image ?? "";
-  if (fields.caption) fields.caption.value = entry.caption ?? "";
-  if (fields.description) fields.description.value = entry.description ?? "";
-  if (fields.tags) {
-    if (Array.isArray(entry.tags)) {
-      fields.tags.value = entry.tags.join(", ");
-    } else if (entry.tags) {
-      fields.tags.value = String(entry.tags);
-    } else {
-      fields.tags.value = "";
-    }
-  }
-  if (fields.alt) fields.alt.value = entry.alt ?? "";
-  if (fields.notes) fields.notes.value = entry.notes ?? "";
-  if (entry.releaseDate && !deriveReleaseDate(entry.releases || [])) {
-    // Preserve legacy release dates for display and sorting if releases are absent
-    if (fields.releases && !fields.releases.value.trim()) {
-      fields.releases.value = entry.releaseDate;
-    }
-  }
+  if (entry.mfcId) fields.mfcId.value = entry.mfcId;
+  if (entry.name) fields.name.value = entry.name;
+  if (entry.series) fields.series.value = entry.series;
+  if (entry.manufacturer) fields.manufacturer.value = entry.manufacturer;
+  if (entry.scale) fields.scale.value = entry.scale;
+  if (entry.releaseDate) fields.releaseDate.value = entry.releaseDate;
+  if (entry.image) fields.image.value = entry.image;
+  if (entry.caption) fields.caption.value = entry.caption;
+  if (entry.description) fields.description.value = entry.description;
+  if (entry.tags) fields.tags.value = Array.isArray(entry.tags)
+    ? entry.tags.join(", ")
+    : String(entry.tags);
+  if (entry.alt) fields.alt.value = entry.alt;
+  if (entry.notes) fields.notes.value = entry.notes;
   renderPreview();
 };
 
@@ -1229,41 +946,10 @@ const handleLookup = async (event) => {
     }
     fields.mfcId.value = itemId;
     fields.name.value = data.name ?? fields.name.value;
-    if (fields.classification && data.classification) {
-      fields.classification.value = data.classification;
-    }
-    if (fields.productLine && data.productLine) {
-      fields.productLine.value = data.productLine;
-    }
-    if (fields.origin && data.origin) {
-      fields.origin.value = data.origin;
-    }
-    if (fields.character && data.character) {
-      fields.character.value = data.character;
-    }
-    if (fields.version && data.version) {
-      fields.version.value = data.version;
-    }
-    if (fields.companies && Array.isArray(data.companies)) {
-      fields.companies.value = formatCompaniesField(data.companies);
-    }
-    if (fields.releases && Array.isArray(data.releases)) {
-      fields.releases.value = formatReleasesField(data.releases);
-    } else if (fields.releases && data.releaseDate && !fields.releases.value.trim()) {
-      fields.releases.value = data.releaseDate;
-    }
-    if (fields.materials && Array.isArray(data.materials)) {
-      fields.materials.value = data.materials.join(", ");
-    }
-    if (fields.dimensions && data.dimensions) {
-      if (typeof data.dimensions === "string") {
-        fields.dimensions.value = data.dimensions;
-      } else if (Array.isArray(data.dimensions)) {
-        fields.dimensions.value = data.dimensions.join("\n");
-      } else if (data.dimensions.text) {
-        fields.dimensions.value = data.dimensions.text;
-      }
-    }
+    fields.series.value = data.series ?? fields.series.value;
+    fields.manufacturer.value = data.manufacturer ?? fields.manufacturer.value;
+    fields.scale.value = data.scale ?? fields.scale.value;
+    fields.releaseDate.value = data.releaseDate ?? fields.releaseDate.value;
     fields.image.value = data.image ?? fields.image.value;
     fields.caption.value = data.caption ?? fields.caption.value;
     fields.description.value = data.description ?? fields.description.value;
