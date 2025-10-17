@@ -23,7 +23,8 @@ const configuredApiBase = (() => {
 
 const grid = document.getElementById("figure-grid");
 const wishlistGrid = document.getElementById("wishlist-grid");
-const sortSelect = document.getElementById("sort-select");
+const sortSelects = Array.from(document.querySelectorAll("[data-sort-select]"));
+let currentSortKey = sortSelects[0]?.value ?? "release-desc";
 const cardTemplate = document.getElementById("figure-card-template");
 const themeToggle = document.querySelector("[data-theme-toggle]");
 const themeToggleIcon = themeToggle?.querySelector("[data-theme-toggle-icon]");
@@ -170,8 +171,7 @@ const refreshCardObservations = () => {
 };
 
 const applySorting = () => {
-  const selected = sortSelect?.value ?? "release-desc";
-  const sorter = sorters[selected] ?? sorters["release-desc"];
+  const sorter = sorters[currentSortKey] ?? sorters["release-desc"];
 
   const sortedFigures = [...figures].sort(sorter);
   const sortedWishlist = [...wishlist].sort(sorter);
@@ -189,7 +189,19 @@ const applySorting = () => {
   refreshCardObservations();
 };
 
-sortSelect?.addEventListener("change", applySorting);
+sortSelects.forEach((select) => {
+  select.value = currentSortKey;
+  select.addEventListener("change", (event) => {
+    const nextValue = event.target.value;
+    currentSortKey = sorters[nextValue] ? nextValue : "release-desc";
+    sortSelects.forEach((other) => {
+      if (other.value !== currentSortKey) {
+        other.value = currentSortKey;
+      }
+    });
+    applySorting();
+  });
+});
 
 const buildApiUrl = (path) => {
   if (!path) return path;

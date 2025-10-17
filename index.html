@@ -67,7 +67,11 @@
       <div class="collection__filters" role="region" aria-label="Collection filters">
         <label class="filter">
           <span class="filter__label">Sort by</span>
-          <select id="sort-select" aria-label="Sort figures">
+          <select
+            id="sort-select-owned"
+            aria-label="Sort figures"
+            data-sort-select
+          >
             <option value="release-desc">Newest releases</option>
             <option value="release-asc">Oldest releases</option>
             <option value="name-asc">Name A → Z</option>
@@ -94,7 +98,11 @@
       <div class="collection__filters" role="region" aria-label="Collection filters">
         <label class="filter">
           <span class="filter__label">Sort by</span>
-          <select id="sort-select" aria-label="Sort figures">
+          <select
+            id="sort-select-wishlist"
+            aria-label="Sort figures"
+            data-sort-select
+          >
             <option value="release-desc">Newest releases</option>
             <option value="release-asc">Oldest releases</option>
             <option value="name-asc">Name A → Z</option>
