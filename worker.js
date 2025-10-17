@@ -21,7 +21,6 @@ const getEnvMemoryStore = (env) => {
   return env[envMemorySymbol];
 };
 
-const BASIC_REALM = "Figure Admin";
 const DEFAULT_USERNAME = "admin";
 const DEFAULT_PASSWORD = "figureadmin";
 const SESSION_COOKIE = "figure_admin_session";
@@ -138,8 +137,6 @@ const normalizeCollection = (input) => {
   return { owned, wishlist };
 };
 
-const COLLECTION_CACHE_KEY = "https://anime-figure-collection.local/collection";
-
 const resolveCollectionBinding = (env) => {
   if (!env || typeof env !== "object") return null;
   const possibleKeys = [
@@ -156,53 +153,6 @@ const resolveCollectionBinding = (env) => {
   return null;
 };
 
-const getCache = () => {
-  try {
-    if (typeof caches !== "undefined" && caches.default) {
-      return caches.default;
-    }
-  } catch (error) {
-    console.warn("Cache API is not available", error);
-  }
-  return null;
-};
-
-const readCollectionFromCache = async () => {
-  const cache = getCache();
-  if (!cache) return null;
-  try {
-    const match = await cache.match(COLLECTION_CACHE_KEY);
-    if (!match) return null;
-    const data = await match.json();
-    if (data && typeof data === "object") {
-      return {
-        owned: Array.isArray(data.owned) ? data.owned : [],
-        wishlist: Array.isArray(data.wishlist) ? data.wishlist : [],
-        updatedAt: data.updatedAt ?? null,
-      };
-    }
-  } catch (error) {
-    console.warn("Unable to read collection from cache", error);
-  }
-  return null;
-};
-
-const writeCollectionToCache = async (record) => {
-  const cache = getCache();
-  if (!cache) return;
-  try {
-    const response = new Response(JSON.stringify(record), {
-      headers: {
-        "Cache-Control": "max-age=31536000",
-        "Content-Type": "application/json",
-      },
-    });
-    await cache.put(COLLECTION_CACHE_KEY, response);
-  } catch (error) {
-    console.warn("Unable to write collection to cache", error);
-  }
-};
-
 const loadCollectionFromStorage = async (env) => {
   const binding = resolveCollectionBinding(env);
   const envMemory = getEnvMemoryStore(env);
@@ -216,7 +166,6 @@ const loadCollectionFromStorage = async (env) => {
           wishlist: Array.isArray(stored.wishlist) ? stored.wishlist : [],
           updatedAt: stored.updatedAt ?? null,
         };
-        await writeCollectionToCache(record);
         const memory = getMemoryStore();
         memory.record = record;
         if (envMemory) {
@@ -232,7 +181,6 @@ const loadCollectionFromStorage = async (env) => {
     const seeded = { ...fallback, updatedAt: new Date().toISOString() };
     try {
       await binding.put(COLLECTION_KV_KEY, JSON.stringify(seeded));
-      await writeCollectionToCache(seeded);
       const memory = getMemoryStore();
       memory.record = seeded;
       if (envMemory) {
@@ -246,16 +194,6 @@ const loadCollectionFromStorage = async (env) => {
 
   if (!binding && envMemory?.record) {
     return envMemory.record;
-  }
-
-  const cached = await readCollectionFromCache();
-  if (cached) {
-    const memory = getMemoryStore();
-    memory.record = cached;
-    if (envMemory) {
-      envMemory.record = cached;
-    }
-    return cached;
   }
 
   const memory = getMemoryStore();
@@ -291,8 +229,6 @@ const storeCollection = async (env, payload) => {
     );
   }
 
-  await writeCollectionToCache(record);
-
   const memory = getMemoryStore();
   memory.record = record;
   if (envMemory) {
@@ -321,15 +257,6 @@ const normalizePathname = (pathname) => {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-
-const unauthorizedResponse = () =>
-  new Response("Unauthorized", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": `Basic realm="${BASIC_REALM}", charset="UTF-8"`,
-      "Cache-Control": "no-store",
-    },
-  });
 
 const decodeBasicAuth = (header) => {
   if (!header) return null;
@@ -628,7 +555,53 @@ const buildLoginRedirectResponse = (request) => {
   const redirectPathname = ensureIndexPathname(requestUrl.pathname);
   const redirectTarget = `${redirectPathname}${requestUrl.search}`;
   loginUrl.searchParams.set("redirect", redirectTarget);
-  return Response.redirect(loginUrl, 303);
+  const response = Response.redirect(loginUrl, 303);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+};
+
+const hasSessionCookie = (request) => {
+  const header = request.headers.get("Cookie");
+  if (!header) return false;
+  return header
+    .split(/;\s*/)
+    .filter(Boolean)
+    .some((part) => part.trim().startsWith(`${SESSION_COOKIE}=`));
+};
+
+const buildUnauthorizedResponse = (
+  request,
+  { redirectToLogin = false, clearSession = false } = {},
+) => {
+  const secure = shouldUseSecureCookie(request);
+
+  if (redirectToLogin) {
+    const response = buildLoginRedirectResponse(request);
+    if (clearSession) {
+      response.headers.append("Set-Cookie", expireSessionCookie({ secure }));
+      if (!secure) {
+        response.headers.append("Set-Cookie", expireSessionCookie({ secure: true }));
+      }
+    }
+    return response;
+  }
+
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Content-Type": "text/plain; charset=utf-8",
+  });
+
+  if (clearSession) {
+    headers.append("Set-Cookie", expireSessionCookie({ secure }));
+    if (!secure) {
+      headers.append("Set-Cookie", expireSessionCookie({ secure: true }));
+    }
+  }
+
+  return new Response("Unauthorized", {
+    status: 401,
+    headers,
+  });
 };
 
 const isHtmlRequest = (request) => {
@@ -647,6 +620,7 @@ const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) 
 
   const headerCredentials = decodeBasicAuth(request.headers.get("Authorization"));
   const hasBasicCredentials = Boolean(headerCredentials);
+  const sessionCookiePresent = hasSessionCookie(request);
 
   if (
     headerCredentials &&
@@ -665,10 +639,13 @@ const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) 
   }
 
   if (hasBasicCredentials) {
-    return unauthorizedResponse();
+    return buildUnauthorizedResponse(request, { clearSession: sessionCookiePresent });
   }
 
-  return redirectToLogin ? buildLoginRedirectResponse(request) : unauthorizedResponse();
+  return buildUnauthorizedResponse(request, {
+    redirectToLogin,
+    clearSession: sessionCookiePresent,
+  });
 };
 
 const decodeHtml = (value) =>
