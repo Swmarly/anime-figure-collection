@@ -104,6 +104,63 @@ body {
   transition: background 0.5s ease, color 0.5s ease;
 }
 
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) rgba(255, 255, 255, 0.3);
+}
+
+body::-webkit-scrollbar {
+  width: 12px;
+}
+
+body::-webkit-scrollbar-track {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--surface-border);
+  margin-block: 0.5rem;
+  box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.3);
+}
+
+body::-webkit-scrollbar-thumb {
+  background: var(--accent-gradient);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  box-shadow: 0 8px 18px rgba(161, 123, 255, 0.35);
+  transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+body::-webkit-scrollbar-thumb:hover {
+  box-shadow: 0 10px 22px rgba(161, 123, 255, 0.45);
+}
+
+body::-webkit-scrollbar-thumb:active {
+  box-shadow: 0 6px 14px rgba(161, 123, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme="dark"] html {
+  scrollbar-color: var(--accent) rgba(44, 32, 72, 0.7);
+}
+
+:root[data-theme="dark"] body::-webkit-scrollbar-track {
+  background: linear-gradient(
+    180deg,
+    rgba(61, 46, 87, 0.8) 0%,
+    rgba(35, 26, 56, 0.82) 100%
+  );
+  border-color: rgba(143, 125, 204, 0.4);
+  box-shadow: inset 0 1px 4px rgba(8, 6, 20, 0.45);
+}
+
+:root[data-theme="dark"] body::-webkit-scrollbar-thumb {
+  box-shadow: 0 12px 28px rgba(8, 6, 20, 0.65);
+}
+
 body::before {
   content: "";
   position: fixed;
