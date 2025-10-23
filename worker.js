@@ -627,6 +627,16 @@ const buildUnauthorizedResponse = (request, { clearSession = false } = {}) => {
 };
 
 const isHtmlRequest = (request) => {
+  const destination = request.headers.get("Sec-Fetch-Dest");
+  if (destination && destination !== "document") {
+    return false;
+  }
+
+  const mode = request.headers.get("Sec-Fetch-Mode");
+  if (mode && mode !== "navigate" && mode !== "same-origin") {
+    return false;
+  }
+
   const accept = request.headers.get("Accept") || "";
   return accept.includes("text/html");
 };
