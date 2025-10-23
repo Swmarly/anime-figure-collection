@@ -16,36 +16,19 @@
     <main class="login" aria-labelledby="login-title">
       <section class="login-card">
         <header class="login-card__header">
-          <h1 id="login-title">Sign in to the Figure Admin Panel</h1>
+          <h1 id="login-title">Figure Admin Panel access</h1>
           <p class="login-card__description">
-            Enter your administrator credentials to access the collection management tools.
+            The admin area now uses HTTP Basic authentication provided by your browser. When you visit
+            the panel you will be prompted to enter the administrator username and password.
           </p>
         </header>
-        <p class="login-card__message" id="login-message" role="alert" hidden></p>
-        <form class="login-form" id="login-form" autocomplete="off">
-          <label class="login-form__field">
-            <span class="login-form__label">Username</span>
-            <input
-              class="login-form__input"
-              id="login-username"
-              name="username"
-              autocomplete="username"
-              required
-            />
-          </label>
-          <label class="login-form__field">
-            <span class="login-form__label">Password</span>
-            <input
-              class="login-form__input"
-              id="login-password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-            />
-          </label>
-          <button type="submit" class="login-form__submit" id="login-submit">Sign in</button>
-        </form>
+        <div class="login-card__body">
+          <p class="login-card__message" id="login-message" role="status">
+            Select the button below to open the admin dashboard. Your browser will request your
+            credentials when needed.
+          </p>
+          <a class="login-form__submit" id="login-open-admin" href="/admin/">Open admin panel</a>
+        </div>
       </section>
     </main>
     <script type="module" src="login.js"></script>

@@ -38,7 +38,7 @@ body {
   padding: clamp(2rem, 1.6rem + 1.5vw, 2.6rem);
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 1.5rem;
 }
 
 .login-card__header h1 {
@@ -53,6 +53,11 @@ body {
   line-height: 1.6;
 }
 
+.login-card__body {
+  display: grid;
+  gap: 1.2rem;
+}
+
 .login-card__message {
   margin: 0;
   border-radius: 18px;
@@ -62,39 +67,12 @@ body {
   font-weight: 600;
 }
 
-.login-form {
-  display: grid;
-  gap: 1.2rem;
-}
-
-.login-form__field {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.login-form__label {
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.login-form__input {
-  border-radius: 18px;
-  border: 1px solid rgba(208, 190, 255, 0.7);
-  background: rgba(255, 255, 255, 0.95);
-  padding: 0.8rem 1rem;
-  font: inherit;
-  color: inherit;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.login-form__input:focus {
-  outline: none;
-  border-color: rgba(249, 115, 197, 0.8);
-  box-shadow: 0 0 0 4px rgba(249, 115, 197, 0.15);
-}
-
 .login-form__submit {
   margin-top: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
   border: none;
   border-radius: 999px;
   background: var(--accent);
@@ -107,18 +85,12 @@ body {
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 
-.login-form__submit:disabled {
-  opacity: 0.7;
-  cursor: wait;
-  box-shadow: none;
-}
-
-.login-form__submit:hover:not(:disabled) {
+.login-form__submit:hover {
   transform: translateY(-1px);
   box-shadow: 0 16px 34px rgba(138, 116, 255, 0.3);
 }
 
-.login-form__submit:active:not(:disabled) {
+.login-form__submit:active {
   transform: translateY(0);
   filter: brightness(0.98);
 }
