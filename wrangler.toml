@@ -6,6 +6,7 @@ compatibility_date = "2024-06-01"
 directory = "."
 
 # Without this binding the Worker falls back to an in-memory store. (Not persistent after redeployment).
+# Has to be bound in both the worker and pages project to function.
 [[kv_namespaces]]
 binding = "COLLECTION"
 id = "9eb8afadcaa343bcab49e375508533d7"
