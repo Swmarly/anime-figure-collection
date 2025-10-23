@@ -50,7 +50,7 @@
     background: radial-gradient(circle at center, rgba(255, 255, 255, 0.7), transparent 60%);
   --bg-gradient: radial-gradient(circle at 20% 20%, #2d0038 0%, #251f3d 35%, #000a44 100%, #000000 100%);
   --accent-gradient: linear-gradient(135deg, #6c0086 0%, #001483 100%);
-  --accent: #ff9de6;
+  --accent: #6c0086;
   --accent-strong: #ffbff2;
   --text-primary: #f6ebff;
   --text-secondary: rgba(246, 235, 255, 0.78);
