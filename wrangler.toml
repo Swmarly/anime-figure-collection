@@ -5,7 +5,7 @@ compatibility_date = "2024-06-01"
 [assets]
 directory = "."
 
-# Without this binding the Worker falls back to an in-memory store. (Not persistent)
+# Without this binding the Worker falls back to an in-memory store. (Not persistent).
 [[kv_namespaces]]
 binding = "COLLECTION"
 id = "9eb8afadcaa343bcab49e375508533d7"
