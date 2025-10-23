@@ -117,6 +117,52 @@ const basicAuth = `Basic ${Buffer.from('admin:figureadmin').toString('base64')}`
 
 console.log('Collection tests passed');
 
+// GET should not overwrite KV data when a transient read error occurs
+{
+  const storedRecord = {
+    owned: [{ name: 'Persisted Entry' }],
+    wishlist: [],
+    updatedAt: '2024-01-01T00:00:00.000Z',
+  };
+  let getCalls = 0;
+  let putCalls = 0;
+  const env = {
+    COLLECTION: {
+      async get(key, options = {}) {
+        getCalls += 1;
+        if (getCalls === 1) {
+          throw new Error('Simulated KV read failure');
+        }
+        if (options.type === 'json') {
+          return JSON.parse(JSON.stringify(storedRecord));
+        }
+        return JSON.stringify(storedRecord);
+      },
+      async put(key, value) {
+        putCalls += 1;
+        Object.assign(storedRecord, JSON.parse(value));
+      },
+    },
+    ASSETS: {
+      fetch: () => new Response(null, { status: 404 }),
+    },
+  };
+
+  const firstResponse = await fetchFromWorker('https://example.com/api/collection', {}, env);
+  assert.equal(firstResponse.status, 200);
+  const firstPayload = await firstResponse.json();
+  assert.equal(firstPayload.owned.length, 0, 'expected fallback collection on KV failure');
+  assert.equal(putCalls, 0, 'expected no KV writes when read fails');
+
+  const secondResponse = await fetchFromWorker('https://example.com/api/collection', {}, env);
+  assert.equal(secondResponse.status, 200);
+  const secondPayload = await secondResponse.json();
+  assert.equal(secondPayload.owned.length, 1, 'expected persisted KV data to remain intact');
+  assert.equal(secondPayload.owned[0].name, 'Persisted Entry');
+}
+
+console.log('Collection KV failure tests passed');
+
 // The API should remain functional when the KV binding is missing
 {
   const env = createEnvWithoutKv();

@@ -174,21 +174,24 @@ const loadCollectionFromStorage = async (env) => {
         }
         return record;
       }
+
+      if (stored == null) {
+        const fallback = createDefaultCollection();
+        const seeded = { ...fallback, updatedAt: new Date().toISOString() };
+        await binding.put(COLLECTION_KV_KEY, JSON.stringify(seeded));
+        memory.record = seeded;
+        if (envMemory) {
+          envMemory.record = seeded;
+        }
+        return seeded;
+      }
+
+      console.warn(
+        "Collection KV returned an unexpected value; falling back to default without persisting.",
+        stored,
+      );
     } catch (error) {
       console.warn("Unable to read collection from KV", error);
-    }
-
-    const fallback = createDefaultCollection();
-    const seeded = { ...fallback, updatedAt: new Date().toISOString() };
-    try {
-      await binding.put(COLLECTION_KV_KEY, JSON.stringify(seeded));
-      memory.record = seeded;
-      if (envMemory) {
-        envMemory.record = seeded;
-      }
-      return seeded;
-    } catch (error) {
-      console.warn("Unable to seed KV with default collection", error);
     }
   }
 
