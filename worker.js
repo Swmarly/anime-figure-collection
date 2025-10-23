@@ -262,7 +262,6 @@ const unauthorizedResponse = () =>
   new Response("Unauthorized", {
     status: 401,
     headers: {
-      "WWW-Authenticate": `Basic realm="${BASIC_REALM}", charset="UTF-8"`,
       "Cache-Control": "no-store",
     },
   });
