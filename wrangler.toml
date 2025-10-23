@@ -7,6 +7,6 @@ directory = "."
 
 # Without this binding the Worker falls back to an in-memory store. (Not persistent)
 [[kv_namespaces]]
-binding = "COLLECTION"
+binding = "collection"
 id = "9eb8afadcaa343bcab49e375508533d7"
-preview_id = "43626cada6e94c6aa89618fd0c78d3e3"
+preview_id = "9eb8afadcaa343bcab49e375508533d7"
