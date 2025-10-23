@@ -138,8 +138,6 @@ const normalizeCollection = (input) => {
   return { owned, wishlist };
 };
 
-const COLLECTION_CACHE_KEY = "https://anime-figure-collection.local/collection";
-
 const resolveCollectionBinding = (env) => {
   if (!env || typeof env !== "object") return null;
   const possibleKeys = [
@@ -156,56 +154,10 @@ const resolveCollectionBinding = (env) => {
   return null;
 };
 
-const getCache = () => {
-  try {
-    if (typeof caches !== "undefined" && caches.default) {
-      return caches.default;
-    }
-  } catch (error) {
-    console.warn("Cache API is not available", error);
-  }
-  return null;
-};
-
-const readCollectionFromCache = async () => {
-  const cache = getCache();
-  if (!cache) return null;
-  try {
-    const match = await cache.match(COLLECTION_CACHE_KEY);
-    if (!match) return null;
-    const data = await match.json();
-    if (data && typeof data === "object") {
-      return {
-        owned: Array.isArray(data.owned) ? data.owned : [],
-        wishlist: Array.isArray(data.wishlist) ? data.wishlist : [],
-        updatedAt: data.updatedAt ?? null,
-      };
-    }
-  } catch (error) {
-    console.warn("Unable to read collection from cache", error);
-  }
-  return null;
-};
-
-const writeCollectionToCache = async (record) => {
-  const cache = getCache();
-  if (!cache) return;
-  try {
-    const response = new Response(JSON.stringify(record), {
-      headers: {
-        "Cache-Control": "max-age=31536000",
-        "Content-Type": "application/json",
-      },
-    });
-    await cache.put(COLLECTION_CACHE_KEY, response);
-  } catch (error) {
-    console.warn("Unable to write collection to cache", error);
-  }
-};
-
 const loadCollectionFromStorage = async (env) => {
   const binding = resolveCollectionBinding(env);
   const envMemory = getEnvMemoryStore(env);
+  const memory = getMemoryStore();
 
   if (binding) {
     try {
@@ -216,8 +168,6 @@ const loadCollectionFromStorage = async (env) => {
           wishlist: Array.isArray(stored.wishlist) ? stored.wishlist : [],
           updatedAt: stored.updatedAt ?? null,
         };
-        await writeCollectionToCache(record);
-        const memory = getMemoryStore();
         memory.record = record;
         if (envMemory) {
           envMemory.record = record;
@@ -232,8 +182,6 @@ const loadCollectionFromStorage = async (env) => {
     const seeded = { ...fallback, updatedAt: new Date().toISOString() };
     try {
       await binding.put(COLLECTION_KV_KEY, JSON.stringify(seeded));
-      await writeCollectionToCache(seeded);
-      const memory = getMemoryStore();
       memory.record = seeded;
       if (envMemory) {
         envMemory.record = seeded;
@@ -244,21 +192,11 @@ const loadCollectionFromStorage = async (env) => {
     }
   }
 
-  if (!binding && envMemory?.record) {
+  if (envMemory?.record) {
+    memory.record = envMemory.record;
     return envMemory.record;
   }
 
-  const cached = await readCollectionFromCache();
-  if (cached) {
-    const memory = getMemoryStore();
-    memory.record = cached;
-    if (envMemory) {
-      envMemory.record = cached;
-    }
-    return cached;
-  }
-
-  const memory = getMemoryStore();
   if (!envMemory && memory.record) {
     return memory.record;
   }
@@ -290,8 +228,6 @@ const storeCollection = async (env, payload) => {
       "Persisted collection KV binding is not configured. Data will only be cached in-memory and may be lost on deployment."
     );
   }
-
-  await writeCollectionToCache(record);
 
   const memory = getMemoryStore();
   memory.record = record;
