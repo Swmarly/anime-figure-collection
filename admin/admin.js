@@ -115,6 +115,57 @@ const redirectToLogin = () => {
   window.location.href = `${LOGIN_PAGE}?${params.toString()}`;
 };
 
+const clearAccessibleCookies = () => {
+  const cookieString = document.cookie;
+  if (!cookieString) {
+    return;
+  }
+
+  const cookies = cookieString.split(";").map((entry) => entry.trim()).filter(Boolean);
+  if (!cookies.length) {
+    return;
+  }
+
+  const expiration = "Thu, 01 Jan 1970 00:00:00 GMT";
+  const host = window.location.hostname;
+  const domainParts = host.split(".").filter(Boolean);
+  const domainVariants = new Set([""]);
+
+  if (domainParts.length > 1) {
+    for (let index = 0; index <= domainParts.length - 2; index += 1) {
+      domainVariants.add(domainParts.slice(index).join("."));
+    }
+  }
+
+  if (host) {
+    domainVariants.add(host);
+  }
+
+  const buildCookieReset = (name, attributes = "") =>
+    `${name}=; expires=${expiration}; max-age=0; path=/` + (attributes ? `; ${attributes}` : "");
+
+  for (const cookie of cookies) {
+    const separatorIndex = cookie.indexOf("=");
+    const name = separatorIndex > -1 ? cookie.slice(0, separatorIndex).trim() : cookie;
+    if (!name) {
+      continue;
+    }
+
+    document.cookie = buildCookieReset(name);
+    document.cookie = buildCookieReset(name, "SameSite=Lax");
+    document.cookie = buildCookieReset(name, "SameSite=Strict");
+
+    for (const domain of domainVariants) {
+      if (!domain) {
+        continue;
+      }
+
+      document.cookie = buildCookieReset(name, `domain=${domain}`);
+      document.cookie = buildCookieReset(name, `domain=.${domain}`);
+    }
+  }
+};
+
 const ensureSession = async () => {
   try {
     const response = await fetch(AUTH_CHECK_ENDPOINT, {
@@ -149,6 +200,7 @@ const authorizedFetch = async (input, init = {}) => {
   return response;
 };
 
+clearAccessibleCookies();
 ensureSession();
 
 const escapeHtml = (value) =>
