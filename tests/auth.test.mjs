@@ -138,4 +138,36 @@ console.log('Login page test passed');
   assert(!/;\s*secure/i.test(setCookie), 'expected session cookie to be usable over HTTP during local development');
 }
 
+// Invalid session cookies should be cleared when accessing protected HTML pages
+{
+  const response = await fetchFromWorker('https://example.com/admin/index.html', {
+    headers: {
+      Cookie: 'figure_admin_session=invalid',
+      Accept: 'text/html',
+    },
+  });
+
+  assert.equal(response.status, 303);
+  const redirectUrl = new URL(response.headers.get('Location'));
+  assert.equal(redirectUrl.origin + redirectUrl.pathname, 'https://example.com/admin/login.html');
+  assert.equal(redirectUrl.searchParams.get('redirect'), '/admin/index.html');
+  const setCookie = response.headers.get('set-cookie') || '';
+  assert(setCookie.includes('figure_admin_session='));
+  assert(setCookie.includes('Max-Age=0'));
+}
+
+// Invalid session cookies should be cleared when requesting other protected resources
+{
+  const response = await fetchFromWorker('https://example.com/admin/admin.css', {
+    headers: {
+      Cookie: 'figure_admin_session=expired-token',
+    },
+  });
+
+  assert.equal(response.status, 401);
+  const setCookie = response.headers.get('set-cookie') || '';
+  assert(setCookie.includes('figure_admin_session='));
+  assert(setCookie.includes('Max-Age=0'));
+}
+
 console.log('Local cookie policy test passed');

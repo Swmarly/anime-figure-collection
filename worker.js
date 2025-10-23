@@ -283,14 +283,6 @@ const normalizePathname = (pathname) => {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-const unauthorizedResponse = () =>
-  new Response("Unauthorized", {
-    status: 401,
-    headers: {
-      "Cache-Control": "no-store",
-    },
-  });
-
 const decodeBasicAuth = (header) => {
   if (!header) return null;
   const [scheme, encoded] = header.split(" ", 2);
@@ -477,16 +469,26 @@ const parseCookies = (header) => {
 
 const getSessionFromCookies = async (request, env) => {
   const header = request.headers.get("Cookie");
-  if (!header) return null;
+  if (!header) {
+    return { session: null, hadSessionCookie: false };
+  }
+
   const cookies = parseCookies(header);
-  if (!cookies[SESSION_COOKIE]) return null;
+  if (!cookies[SESSION_COOKIE]) {
+    return { session: null, hadSessionCookie: false };
+  }
+
   try {
     const decoded = decodeURIComponent(cookies[SESSION_COOKIE]);
-    return await verifySessionToken(decoded, env);
+    const session = await verifySessionToken(decoded, env);
+    if (session) {
+      return { session, hadSessionCookie: true };
+    }
   } catch (error) {
     console.warn("Unable to verify session token", error);
-    return null;
   }
+
+  return { session: null, hadSessionCookie: true };
 };
 
 const LOCAL_HOSTNAMES = new Set([
@@ -568,6 +570,14 @@ const expireSessionCookie = ({ secure = true } = {}) => {
   return attributes.join("; ");
 };
 
+const appendSessionInvalidationCookies = (headers, request) => {
+  const secure = shouldUseSecureCookie(request);
+  headers.append("Set-Cookie", expireSessionCookie({ secure }));
+  if (!secure) {
+    headers.append("Set-Cookie", expireSessionCookie({ secure: true }));
+  }
+};
+
 const ensureIndexPathname = (pathname) => {
   if (!pathname) return "/index.html";
   if (pathname.endsWith("/")) {
@@ -582,13 +592,38 @@ const ensureIndexPathname = (pathname) => {
   return pathname;
 };
 
-const buildLoginRedirectResponse = (request) => {
+const buildLoginRedirectResponse = (request, { clearSession = false } = {}) => {
   const requestUrl = new URL(request.url);
   const loginUrl = new URL("/admin/login.html", requestUrl.origin);
   const redirectPathname = ensureIndexPathname(requestUrl.pathname);
   const redirectTarget = `${redirectPathname}${requestUrl.search}`;
   loginUrl.searchParams.set("redirect", redirectTarget);
-  return Response.redirect(loginUrl, 303);
+  const headers = new Headers({
+    Location: loginUrl.toString(),
+    "Cache-Control": "no-store",
+  });
+
+  if (clearSession) {
+    appendSessionInvalidationCookies(headers, request);
+  }
+
+  return new Response(null, {
+    status: 303,
+    headers,
+  });
+};
+
+const buildUnauthorizedResponse = (request, { clearSession = false } = {}) => {
+  const headers = new Headers({ "Cache-Control": "no-store" });
+
+  if (clearSession) {
+    appendSessionInvalidationCookies(headers, request);
+  }
+
+  return new Response("Unauthorized", {
+    status: 401,
+    headers,
+  });
 };
 
 const isHtmlRequest = (request) => {
@@ -619,16 +654,20 @@ const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) 
     return null;
   }
 
-  const session = await getSessionFromCookies(request, env);
+  const { session, hadSessionCookie } = await getSessionFromCookies(request, env);
   if (session) {
     return null;
   }
 
   if (hasBasicCredentials) {
-    return unauthorizedResponse();
+    return buildUnauthorizedResponse(request, { clearSession: hadSessionCookie });
   }
 
-  return redirectToLogin ? buildLoginRedirectResponse(request) : unauthorizedResponse();
+  if (redirectToLogin) {
+    return buildLoginRedirectResponse(request, { clearSession: hadSessionCookie });
+  }
+
+  return buildUnauthorizedResponse(request, { clearSession: hadSessionCookie });
 };
 
 const decodeHtml = (value) =>
@@ -1161,12 +1200,7 @@ const handleLoginRequest = async (request, env) => {
 
 const handleLogoutRequest = async (request) => {
   const headers = new Headers({ "Cache-Control": "no-store" });
-  const secure = shouldUseSecureCookie(request);
-  headers.append("Set-Cookie", expireSessionCookie({ secure }));
-
-  if (!secure) {
-    headers.append("Set-Cookie", expireSessionCookie({ secure: true }));
-  }
+  appendSessionInvalidationCookies(headers, request);
 
   return new Response(null, {
     status: 204,
