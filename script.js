@@ -24,17 +24,67 @@ const configuredApiBase = (() => {
 const grid = document.getElementById("figure-grid");
 const wishlistGrid = document.getElementById("wishlist-grid");
 const sortSelects = Array.from(document.querySelectorAll("[data-sort-select]"));
-let currentSortKey = sortSelects[0]?.value ?? "release-desc";
+const DEFAULT_SORT_KEY = "name-asc";
+let currentSortKey = DEFAULT_SORT_KEY;
 const cardTemplate = document.getElementById("figure-card-template");
 const themeToggle = document.querySelector("[data-theme-toggle]");
 const themeToggleIcon = themeToggle?.querySelector("[data-theme-toggle-icon]");
 const themeToggleText = themeToggle?.querySelector("[data-theme-toggle-text]");
 
-const releaseValue = (figure) => figure.releaseDate ?? "";
+const releaseSortValue = (figure) => {
+  const value = figure?.releaseDate;
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}$/.test(trimmed)) {
+    const [year, month] = trimmed.split("-");
+    return Number(year) * 100 + Number(month);
+  }
+
+  if (/^\d{4}$/.test(trimmed)) {
+    return Number(trimmed) * 100;
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (!Number.isNaN(parsed)) {
+    const date = new Date(parsed);
+    return date.getFullYear() * 100 + (date.getMonth() + 1);
+  }
+
+  return null;
+};
+
+const compareReleaseAsc = (a, b) => {
+  const aValue = releaseSortValue(a);
+  const bValue = releaseSortValue(b);
+
+  if (aValue === null && bValue === null) return 0;
+  if (aValue === null) return 1;
+  if (bValue === null) return -1;
+
+  return aValue - bValue;
+};
+
+const compareReleaseDesc = (a, b) => {
+  const aValue = releaseSortValue(a);
+  const bValue = releaseSortValue(b);
+
+  if (aValue === null && bValue === null) return 0;
+  if (aValue === null) return 1;
+  if (bValue === null) return -1;
+
+  return bValue - aValue;
+};
 
 const sorters = {
-  "release-desc": (a, b) => (releaseValue(a) < releaseValue(b) ? 1 : -1),
-  "release-asc": (a, b) => (releaseValue(a) > releaseValue(b) ? 1 : -1),
+  "release-desc": compareReleaseDesc,
+  "release-asc": compareReleaseAsc,
   "name-asc": (a, b) => a.name.localeCompare(b.name),
   "name-desc": (a, b) => b.name.localeCompare(a.name),
 };
@@ -171,7 +221,7 @@ const refreshCardObservations = () => {
 };
 
 const applySorting = () => {
-  const sorter = sorters[currentSortKey] ?? sorters["release-desc"];
+  const sorter = sorters[currentSortKey] ?? sorters[DEFAULT_SORT_KEY];
 
   const sortedFigures = [...figures].sort(sorter);
   const sortedWishlist = [...wishlist].sort(sorter);
@@ -193,7 +243,7 @@ sortSelects.forEach((select) => {
   select.value = currentSortKey;
   select.addEventListener("change", (event) => {
     const nextValue = event.target.value;
-    currentSortKey = sorters[nextValue] ? nextValue : "release-desc";
+    currentSortKey = sorters[nextValue] ? nextValue : DEFAULT_SORT_KEY;
     sortSelects.forEach((other) => {
       if (other.value !== currentSortKey) {
         other.value = currentSortKey;
