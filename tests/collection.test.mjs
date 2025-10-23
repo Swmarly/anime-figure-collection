@@ -49,6 +49,23 @@ const createEnvWithoutKv = () => ({
   },
 });
 
+// GET should support case-insensitive KV binding resolution
+{
+  const env = {
+    collection: createKvNamespace(),
+    ASSETS: {
+      fetch: () => new Response(null, { status: 404 }),
+    },
+  };
+
+  const response = await fetchFromWorker('https://example.com/api/collection', {}, env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert(Array.isArray(payload.owned));
+  const stored = await env.collection.get('collection');
+  assert(stored, 'expected collection to seed KV when binding name casing differs');
+}
+
 // GET should return an empty default collection and persist it to KV
 {
   const env = createEnv();
