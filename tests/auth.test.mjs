@@ -28,65 +28,64 @@ const parseJson = async (response) => {
   }
 };
 
-const basicAuthHeader = (username, password) =>
-  `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-
-const bodyPayload = JSON.stringify({ owned: [], wishlist: [] });
-
-// Unauthenticated modifications should trigger a Basic challenge and never set cookies
+// Successful login with default credentials
 {
-  const response = await fetchFromWorker('https://example.com/api/collection', {
-    method: 'PUT',
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: bodyPayload,
-  });
-  assert.equal(response.status, 401);
-  const challenge = response.headers.get('www-authenticate') || '';
-  assert(challenge.toLowerCase().includes('basic'));
-  assert.equal(response.headers.get('set-cookie'), null);
-}
-
-// Successful Basic authentication grants access without cookies
-{
-  const response = await fetchFromWorker('https://example.com/api/collection', {
-    method: 'PUT',
-    headers: {
-      Authorization: basicAuthHeader('admin', 'figureadmin'),
-      'Content-Type': 'application/json',
-    },
-    body: bodyPayload,
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
   });
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('set-cookie'), null);
+  assert.ok(response.headers.get('set-cookie'), 'expected a session cookie to be returned');
   const payload = await parseJson(response);
-  assert(payload);
+  assert.deepEqual(payload, { success: true });
 }
 
-// Invalid Basic credentials are rejected with 401
+// Trailing slash on the login endpoint should be accepted
 {
-  const response = await fetchFromWorker('https://example.com/api/collection', {
-    method: 'PUT',
-    headers: {
-      Authorization: basicAuthHeader('admin', 'wrong'),
-      'Content-Type': 'application/json',
-    },
-    body: bodyPayload,
+  const response = await fetchFromWorker('https://example.com/api/login/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+}
+
+// Invalid credentials should report an error payload
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'wrong' }),
   });
 
   assert.equal(response.status, 401);
-  const challenge = response.headers.get('www-authenticate') || '';
-  assert(challenge.toLowerCase().includes('basic'));
+  const payload = await parseJson(response);
+  assert(payload?.error?.includes('Invalid username or password'));
 }
 
-// The admin HTML requires authentication and does not set cookies
+// GET requests should be rejected with Method Not Allowed
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'GET',
+  });
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('Allow'), 'POST');
+}
+
+console.log('Auth tests passed');
+
+// The login page without an extension should be served directly to prevent redirect loops
+// triggered by upstream permanent redirects (e.g. 308 responses when requesting /admin/login).
 {
   const assetEnv = {
     ASSETS: {
       fetch: (request) => {
         const assetUrl = new URL(request.url);
-        if (assetUrl.pathname === '/admin/index.html') {
-          return new Response('<!DOCTYPE html><title>Admin</title><h1>Admin Panel</h1>', {
+        if (assetUrl.pathname === '/admin/login.html') {
+          return new Response(`<!DOCTYPE html><title>Login</title><h1>Sign in to the Figure Admin Panel</h1>`, {
             headers: { 'Content-Type': 'text/html' },
           });
         }
@@ -95,34 +94,48 @@ const bodyPayload = JSON.stringify({ owned: [], wishlist: [] });
             headers: { 'Content-Type': 'text/html' },
           });
         }
-        return new Response(null, { status: 404 });
+        return new Response(null, {
+          status: 308,
+          headers: {
+            Location: 'https://example.com/admin/login/',
+          },
+        });
       },
     },
   };
 
-  const unauthorized = await fetchFromWorker(
-    'https://example.com/admin/index.html',
+  const response = await fetchFromWorker(
+    'https://example.com/admin/login',
     {
       headers: { Accept: 'text/html' },
     },
     assetEnv,
   );
-  assert.equal(unauthorized.status, 401);
-  const challenge = unauthorized.headers.get('www-authenticate') || '';
-  assert(challenge.toLowerCase().includes('basic'));
 
-  const authorized = await fetchFromWorker(
-    'https://example.com/admin/index.html',
-    {
-      headers: {
-        Accept: 'text/html',
-        Authorization: basicAuthHeader('admin', 'figureadmin'),
-      },
-    },
-    assetEnv,
-  );
-  assert.equal(authorized.status, 200);
-  assert.equal(authorized.headers.get('set-cookie'), null);
+  assert.equal(response.status, 200);
+  const contentType = response.headers.get('Content-Type') || '';
+  assert(contentType.includes('text/html'));
+  const body = await response.text();
+  assert(body.includes('Sign in to the Figure Admin Panel'));
 }
 
-console.log('Auth tests passed');
+console.log('Login page test passed');
+
+// Local development over HTTP should not receive secure cookies even if proxy headers claim HTTPS.
+{
+  const response = await fetchFromWorker('http://localhost/api/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'CF-Visitor': '{"scheme":"https"}',
+      'X-Forwarded-Proto': 'https',
+    },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+  const setCookie = response.headers.get('set-cookie') || '';
+  assert(!/;\s*secure/i.test(setCookie), 'expected session cookie to be usable over HTTP during local development');
+}
+
+console.log('Local cookie policy test passed');
