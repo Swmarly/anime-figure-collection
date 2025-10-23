@@ -104,16 +104,20 @@ body {
   transition: background 0.5s ease, color 0.5s ease;
 }
 
-html {
+html,
+body {
   scrollbar-width: thin;
   scrollbar-color: var(--accent) rgba(255, 255, 255, 0.3);
+  scrollbar-gutter: stable both-edges;
 }
 
-body::-webkit-scrollbar {
+body::-webkit-scrollbar,
+html::-webkit-scrollbar {
   width: 12px;
 }
 
-body::-webkit-scrollbar-track {
+body::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track {
   background: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.22) 0%,
@@ -125,7 +129,8 @@ body::-webkit-scrollbar-track {
   box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.3);
 }
 
-body::-webkit-scrollbar-thumb {
+body::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb {
   background: var(--accent-gradient);
   border-radius: 999px;
   border: 3px solid transparent;
@@ -134,20 +139,24 @@ body::-webkit-scrollbar-thumb {
   transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
-body::-webkit-scrollbar-thumb:hover {
+body::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover {
   box-shadow: 0 10px 22px rgba(161, 123, 255, 0.45);
 }
 
-body::-webkit-scrollbar-thumb:active {
+body::-webkit-scrollbar-thumb:active,
+html::-webkit-scrollbar-thumb:active {
   box-shadow: 0 6px 14px rgba(161, 123, 255, 0.4);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-:root[data-theme="dark"] html {
+:root[data-theme="dark"] html,
+:root[data-theme="dark"] body {
   scrollbar-color: var(--accent) rgba(44, 32, 72, 0.7);
 }
 
-:root[data-theme="dark"] body::-webkit-scrollbar-track {
+:root[data-theme="dark"] body::-webkit-scrollbar-track,
+:root[data-theme="dark"] html::-webkit-scrollbar-track {
   background: linear-gradient(
     180deg,
     rgba(61, 46, 87, 0.8) 0%,
@@ -157,8 +166,14 @@ body::-webkit-scrollbar-thumb:active {
   box-shadow: inset 0 1px 4px rgba(8, 6, 20, 0.45);
 }
 
-:root[data-theme="dark"] body::-webkit-scrollbar-thumb {
+:root[data-theme="dark"] body::-webkit-scrollbar-thumb,
+:root[data-theme="dark"] html::-webkit-scrollbar-thumb {
   box-shadow: 0 12px 28px rgba(8, 6, 20, 0.65);
+}
+
+body::-webkit-scrollbar-corner,
+html::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body::before {
