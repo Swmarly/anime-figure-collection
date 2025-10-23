@@ -101,8 +101,37 @@ const state = {
   savePromise: null,
 };
 
+const LOGIN_PAGE = "/admin/login.html";
+const AUTH_CHECK_ENDPOINT = "/api/auth-check";
 const COLLECTION_ENDPOINT = "/api/collection";
-const AUTH_REQUIRED_MESSAGE = "Authentication required. Reload the page to sign back in.";
+const SESSION_EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
+
+const redirectToLogin = () => {
+  const redirectTarget = window.location.pathname.endsWith("/")
+    ? `${window.location.pathname}index.html`
+    : window.location.pathname;
+  const params = new URLSearchParams();
+  params.set("redirect", redirectTarget.replace(/^\/+/, "/"));
+  window.location.href = `${LOGIN_PAGE}?${params.toString()}`;
+};
+
+const ensureSession = async () => {
+  try {
+    const response = await fetch(AUTH_CHECK_ENDPOINT, {
+      method: "GET",
+      headers: { "Cache-Control": "no-cache" },
+      credentials: "same-origin",
+    });
+    if (response.status === 204) {
+      return true;
+    }
+  } catch (error) {
+    console.warn("Unable to verify admin session", error);
+  }
+  redirectToLogin();
+  return false;
+};
+
 const authorizedFetch = async (input, init = {}) => {
   const options = {
     ...init,
@@ -113,12 +142,14 @@ const authorizedFetch = async (input, init = {}) => {
   const response = await fetch(input, options);
 
   if (response.status === 401) {
-    window.location.reload();
+    redirectToLogin();
     throw new Error("Unauthorized");
   }
 
   return response;
 };
+
+ensureSession();
 
 const escapeHtml = (value) =>
   value
@@ -937,7 +968,7 @@ const handleLookup = async (event) => {
     renderPreview();
   } catch (error) {
     if (error?.message === "Unauthorized") {
-      lookupFeedback.textContent = AUTH_REQUIRED_MESSAGE;
+      lookupFeedback.textContent = SESSION_EXPIRED_MESSAGE;
       return;
     }
     lookupFeedback.textContent =
@@ -1142,10 +1173,17 @@ generateSlugButton.addEventListener("click", () => {
 });
 
 if (signOutButton) {
-  signOutButton.addEventListener("click", () => {
-    window.alert(
-      "To end your admin session, close this tab or quit the browser so the HTTP Basic credentials are cleared."
-    );
+  signOutButton.addEventListener("click", async () => {
+    try {
+      await fetch("/api/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch (error) {
+      console.warn("Unable to sign out cleanly", error);
+    } finally {
+      redirectToLogin();
+    }
   });
 }
 
