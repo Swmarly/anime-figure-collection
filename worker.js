@@ -138,6 +138,9 @@ const normalizeCollection = (input) => {
   return { owned, wishlist };
 };
 
+const hasKvInterface = (binding) =>
+  binding && typeof binding.get === "function" && typeof binding.put === "function";
+
 const resolveCollectionBinding = (env) => {
   if (!env || typeof env !== "object") return null;
   const possibleKeys = [
@@ -146,11 +149,30 @@ const resolveCollectionBinding = (env) => {
     "FIGURE_COLLECTION_KV",
     "COLLECTION_KV",
   ];
+
   for (const key of possibleKeys) {
-    if (env[key]) {
+    if (hasKvInterface(env[key])) {
       return env[key];
     }
   }
+
+  const normalizedCandidates = new Map(
+    possibleKeys.map((key) => [key.toLowerCase(), key]),
+  );
+
+  for (const [rawKey, value] of Object.entries(env)) {
+    const normalizedKey = rawKey?.toString().toLowerCase();
+    if (!normalizedKey) continue;
+    if (!normalizedCandidates.has(normalizedKey)) continue;
+    if (!hasKvInterface(value)) continue;
+
+    console.warn(
+      `Resolved collection KV binding using case-insensitive match for "${rawKey}". ` +
+        "Update the binding name to match one of the expected values to silence this warning.",
+    );
+    return value;
+  }
+
   return null;
 };
 
