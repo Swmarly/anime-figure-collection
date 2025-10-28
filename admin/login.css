@@ -16,13 +16,6 @@
   --input-placeholder: rgba(46, 33, 82, 0.45);
   --message-bg: rgba(255, 138, 176, 0.15);
   --message-text: var(--accent-solid);
-  --theme-toggle-bg: rgba(255, 255, 255, 0.72);
-  --theme-toggle-border: rgba(209, 195, 255, 0.7);
-  --theme-toggle-text: var(--accent-strong);
-  --theme-toggle-shadow: 0 10px 24px rgba(138, 116, 255, 0.2);
-  --theme-toggle-hover-bg: rgba(255, 255, 255, 0.85);
-  --theme-toggle-hover-shadow: 0 14px 30px rgba(138, 116, 255, 0.26);
-  --theme-toggle-icon-filter: none;
   --submit-shadow: 0 12px 30px rgba(138, 116, 255, 0.24);
   --submit-hover-shadow: 0 16px 34px rgba(138, 116, 255, 0.3);
 }
@@ -44,13 +37,6 @@
   --input-placeholder: rgba(220, 213, 255, 0.45);
   --message-bg: rgba(255, 143, 180, 0.18);
   --message-text: #ff9ccf;
-  --theme-toggle-bg: rgba(32, 28, 48, 0.85);
-  --theme-toggle-border: rgba(134, 117, 198, 0.55);
-  --theme-toggle-text: #f3ecff;
-  --theme-toggle-shadow: 0 10px 28px rgba(5, 4, 12, 0.5);
-  --theme-toggle-hover-bg: rgba(38, 33, 56, 0.9);
-  --theme-toggle-hover-shadow: 0 16px 38px rgba(5, 4, 12, 0.55);
-  --theme-toggle-icon-filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
   --submit-shadow: 0 14px 32px rgba(6, 5, 16, 0.6);
   --submit-hover-shadow: 0 18px 36px rgba(5, 4, 12, 0.65);
 }
@@ -83,11 +69,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
-}
-
-.login-card__actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .login-card__header h1 {
@@ -174,45 +155,6 @@ body {
 .login-form__submit:active:not(:disabled) {
   transform: translateY(0);
   filter: brightness(0.98);
-}
-
-.theme-toggle {
-  border: 1px solid var(--theme-toggle-border);
-  background: var(--theme-toggle-bg);
-  color: var(--theme-toggle-text);
-  border-radius: 999px;
-  padding: 0.45rem 1rem;
-  font: inherit;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  cursor: pointer;
-  box-shadow: var(--theme-toggle-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.theme-toggle:hover,
-.theme-toggle:focus-visible {
-  background: var(--theme-toggle-hover-bg);
-  box-shadow: var(--theme-toggle-hover-shadow);
-  transform: translateY(-1px);
-}
-
-.theme-toggle:active {
-  transform: translateY(0);
-}
-
-.theme-toggle__icon {
-  font-size: 1rem;
-  filter: var(--theme-toggle-icon-filter);
-  transition: transform 0.2s ease;
-}
-
-.theme-toggle:hover .theme-toggle__icon,
-.theme-toggle:focus-visible .theme-toggle__icon {
-  transform: scale(1.08);
 }
 
 @media (max-width: 480px) {
