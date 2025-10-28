@@ -108,7 +108,7 @@ html,
 body {
   scrollbar-width: thin;
   scrollbar-color: var(--accent) rgba(255, 255, 255, 0.3);
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
 }
 
 body::-webkit-scrollbar,
