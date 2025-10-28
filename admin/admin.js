@@ -13,7 +13,6 @@ const generateSlugButton = document.getElementById("generate-slug");
 const manager = document.getElementById("collection-manager");
 const signOutButton = document.getElementById("sign-out-button");
 const saveChangesButton = document.getElementById("save-changes");
-const themeToggle = document.getElementById("theme-toggle");
 const saveButtonDefaultLabel = saveChangesButton
   ? saveChangesButton.textContent.trim() || "Save changes"
   : "Save changes";
@@ -37,7 +36,7 @@ const fields = {
   notes: field("figure-notes"),
 };
 
-const THEME_STORAGE_KEY = "afc-admin-theme";
+const THEME_STORAGE_KEY = "kawaii-theme-preference";
 const prefersDarkScheme = window.matchMedia
   ? window.matchMedia("(prefers-color-scheme: dark)")
   : { matches: false, addEventListener: () => {}, removeEventListener: () => {} };
@@ -56,40 +55,21 @@ const readStoredThemePreference = () => {
 
 let storedThemePreference = readStoredThemePreference();
 
-const updateThemeToggleAppearance = (theme) => {
-  if (!themeToggle) {
-    return;
-  }
-  const isDark = theme === "dark";
-  themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
-  const icon = themeToggle.querySelector(".theme-toggle__icon");
-  const label = themeToggle.querySelector(".theme-toggle__text");
-  if (icon) {
-    icon.textContent = isDark ? "☀️" : "🌙";
-  }
-  if (label) {
-    label.textContent = isDark ? "Light mode" : "Dark mode";
-  }
-};
-
 const applyTheme = (theme) => {
-  const normalized = theme === "dark" ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", normalized);
-  updateThemeToggleAppearance(normalized);
+  if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
 };
 
 const getPreferredTheme = () => storedThemePreference ?? (prefersDarkScheme.matches ? "dark" : "light");
 
-const setStoredThemePreference = (theme) => {
-  storedThemePreference = theme;
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch (error) {
-    console.warn("Unable to persist theme preference", error);
-  }
+const applyPreferredTheme = () => {
+  applyTheme(getPreferredTheme());
 };
 
-applyTheme(getPreferredTheme());
+applyPreferredTheme();
 
 if (prefersDarkScheme && typeof prefersDarkScheme.addEventListener === "function") {
   prefersDarkScheme.addEventListener("change", (event) => {
@@ -100,14 +80,19 @@ if (prefersDarkScheme && typeof prefersDarkScheme.addEventListener === "function
   });
 }
 
-if (themeToggle) {
-  themeToggle.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    const nextTheme = currentTheme === "dark" ? "light" : "dark";
-    setStoredThemePreference(nextTheme);
-    applyTheme(nextTheme);
-  });
-}
+window.addEventListener("storage", (event) => {
+  if (event.key !== THEME_STORAGE_KEY) {
+    return;
+  }
+
+  if (event.newValue === "dark" || event.newValue === "light") {
+    storedThemePreference = event.newValue;
+  } else {
+    storedThemePreference = null;
+  }
+
+  applyPreferredTheme();
+});
 
 const slugState = {
   manual: false,
