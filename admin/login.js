@@ -3,6 +3,79 @@ const usernameInput = document.getElementById("login-username");
 const passwordInput = document.getElementById("login-password");
 const submitButton = document.getElementById("login-submit");
 const message = document.getElementById("login-message");
+const themeToggle = document.getElementById("theme-toggle");
+
+const THEME_STORAGE_KEY = "afc-admin-theme";
+const prefersDarkScheme = window.matchMedia
+  ? window.matchMedia("(prefers-color-scheme: dark)")
+  : { matches: false, addEventListener: () => {}, removeEventListener: () => {} };
+
+const readStoredThemePreference = () => {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch (error) {
+    console.warn("Unable to read stored theme preference", error);
+  }
+  return null;
+};
+
+let storedThemePreference = readStoredThemePreference();
+
+const updateThemeToggleAppearance = (theme) => {
+  if (!themeToggle) {
+    return;
+  }
+  const isDark = theme === "dark";
+  themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
+  const icon = themeToggle.querySelector(".theme-toggle__icon");
+  const label = themeToggle.querySelector(".theme-toggle__text");
+  if (icon) {
+    icon.textContent = isDark ? "☀️" : "🌙";
+  }
+  if (label) {
+    label.textContent = isDark ? "Light mode" : "Dark mode";
+  }
+};
+
+const applyTheme = (theme) => {
+  const normalized = theme === "dark" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", normalized);
+  updateThemeToggleAppearance(normalized);
+};
+
+const getPreferredTheme = () => storedThemePreference ?? (prefersDarkScheme.matches ? "dark" : "light");
+
+const setStoredThemePreference = (theme) => {
+  storedThemePreference = theme;
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (error) {
+    console.warn("Unable to persist theme preference", error);
+  }
+};
+
+applyTheme(getPreferredTheme());
+
+if (prefersDarkScheme && typeof prefersDarkScheme.addEventListener === "function") {
+  prefersDarkScheme.addEventListener("change", (event) => {
+    if (storedThemePreference) {
+      return;
+    }
+    applyTheme(event.matches ? "dark" : "light");
+  });
+}
+
+if (themeToggle) {
+  themeToggle.addEventListener("click", () => {
+    const currentTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    setStoredThemePreference(nextTheme);
+    applyTheme(nextTheme);
+  });
+}
 
 const DEFAULT_REDIRECT = "/admin/index.html";
 
