@@ -95,4 +95,4 @@ npm test
 (Uses Node’s built-in test runner and does not require additional dependencies.)
 
 ## License
-This project is released under the [MIT License](./LICENSE). You are free to use, modify, and distribute the code provided you include the original copyright notice.
+This project is released under the [Creative Commons Attribution-NonCommercial 4.0 International License](./LICENSE). You may use and adapt the code for non-commercial purposes as long as you provide proper attribution to the Anime Figure Collection contributors.
