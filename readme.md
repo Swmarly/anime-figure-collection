@@ -46,6 +46,8 @@ The Worker recognizes the following environment bindings:
 
 When no KV binding is configured the Worker caches data in-memory. This is sufficient for local development but changes are lost between deployments.
 
+Cloudflare KV entries created by this Worker do **not** use expiration or TTL options; the `collection` record remains until you manually delete the namespace contents.
+
 ## Run locally
 1. Install dependencies: `npm install -g wrangler` (or use `npx wrangler` in every command).
 2. Start the development server:
