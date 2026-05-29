@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 
 const worker = await import('../worker.js');
 
-const buildSampleHtml = ({ firstWidth, firstHeight }) => `<!DOCTYPE html><html><head>
+const buildSampleHtml = ({
+  firstWidth,
+  firstHeight,
+  firstGalleryPath = 'items%5C%2F2%5C%2F1685257-main.jpg',
+}) => `<!DOCTYPE html><html><head>
 <meta property="og:title" content="Rem" />
 <meta property="og:image" content="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" />
 <meta property="og:description" content="Rem figure with blue hair." />
@@ -32,7 +36,7 @@ const buildSampleHtml = ({ firstWidth, firstHeight }) => `<!DOCTYPE html><html><
       <a href="#" class="main" _index="0" title="Open official gallery">
         <img src="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" alt="Rem" width="${firstWidth}" height="${firstHeight}" />
       </a>
-      <meta name="pictures" content="%5B%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2Fitems%5C%2F2%5C%2F1685257-main.jpg%22%2C%22w%22%3A${firstWidth}%2C%22h%22%3A${firstHeight}%7D%2C%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2Fpictures%5C%2F2025%5C%2F07%5C%2F18%5C%2F1685257-second.jpeg%22%2C%22w%22%3A1280%2C%22h%22%3A1920%7D%5D" />
+      <meta name="pictures" content="%5B%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2F${firstGalleryPath}%22%2C%22w%22%3A${firstWidth}%2C%22h%22%3A${firstHeight}%7D%2C%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2Fpictures%5C%2F2025%5C%2F07%5C%2F18%5C%2F1685257-second.jpeg%22%2C%22w%22%3A1280%2C%22h%22%3A1920%7D%5D" />
       <a class="more" href="#" _index="1" style="background: url(&quot;https://static.myfigurecollection.net/upload/pictures/2025/07/18/thumbnails/1685257-second.jpeg&quot;) 0 0 / cover no-repeat transparent;"></a>
     </div>
   </div>
@@ -41,13 +45,19 @@ const buildSampleHtml = ({ firstWidth, firstHeight }) => `<!DOCTYPE html><html><
 
 const originalFetch = globalThis.fetch;
 
-const fetchLookupPayload = async (html) => {
+const fetchLookupPayload = async (html, { missingFullSize = false } = {}) => {
   globalThis.fetch = async (input) => {
     const url = typeof input === 'string' ? input : input.url;
     if (url.includes('myfigurecollection.net/item/1685257')) {
       return new Response(html, {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
+      });
+    }
+    if (url.includes('static.myfigurecollection.net/upload/items/2/1685257-main.jpg')) {
+      return new Response('', {
+        status: missingFullSize ? 404 : 200,
+        headers: missingFullSize ? {} : { 'Content-Type': 'image/jpeg' },
       });
     }
     throw new Error(`Unexpected fetch for URL: ${url}`);
@@ -104,6 +114,24 @@ try {
   );
   assert.deepEqual(highResolutionPayload.images, [
     'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
+    'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
+  ]);
+
+  const missingFullSizePayload = await fetchLookupPayload(
+    buildSampleHtml({
+      firstWidth: 900,
+      firstHeight: 1350,
+      firstGalleryPath: 'items%5C%2F1%5C%2F1685257-main.jpg',
+    }),
+    { missingFullSize: true },
+  );
+
+  assert.equal(
+    missingFullSizePayload.image,
+    'https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg',
+  );
+  assert.deepEqual(missingFullSizePayload.images, [
+    'https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg',
     'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
   ]);
 

@@ -933,6 +933,87 @@ const buildFullSizeMfcImageUrl = (value) => {
   }
 };
 
+
+const canonicalizeMfcImageUrl = (value) => {
+  const normalized = normalizeMfcImageUrl(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    if (url.hostname.toLowerCase().endsWith("myfigurecollection.net")) {
+      url.protocol = "https:";
+      url.search = "";
+      return url.toString();
+    }
+    return normalized;
+  } catch {
+    return normalized;
+  }
+};
+
+const shouldVerifyMfcImageUpgrade = (original, upgraded) => {
+  if (!original || !upgraded || original === upgraded) return false;
+
+  try {
+    const originalUrl = new URL(original);
+    const upgradedUrl = new URL(upgraded);
+    if (originalUrl.hostname.toLowerCase() !== upgradedUrl.hostname.toLowerCase()) return false;
+
+    const originalMatch = originalUrl.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
+    const upgradedMatch = upgradedUrl.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
+    return Boolean(originalMatch && upgradedMatch && originalMatch[1] !== "2" && upgradedMatch[1] === "2");
+  } catch {
+    return false;
+  }
+};
+
+const mfcImageRequestHeaders = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
+  Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+  Referer: "https://myfigurecollection.net/",
+};
+
+const isImageResponse = (response) => {
+  if (!response.ok) return false;
+  const contentType = response.headers.get("Content-Type") || "";
+  return !contentType || contentType.toLowerCase().startsWith("image/");
+};
+
+const mfcImageExists = async (url) => {
+  try {
+    const headResponse = await fetch(url, {
+      method: "HEAD",
+      headers: mfcImageRequestHeaders,
+      cf: { cacheTtl: 3600, cacheEverything: false },
+    });
+    if (isImageResponse(headResponse)) return true;
+    if (headResponse.status !== 405 && headResponse.status !== 403) return false;
+  } catch (error) {
+    console.warn("Unable to verify MFC image with HEAD", error);
+  }
+
+  try {
+    const getResponse = await fetch(url, {
+      headers: { ...mfcImageRequestHeaders, Range: "bytes=0-0" },
+      cf: { cacheTtl: 3600, cacheEverything: false },
+    });
+    return isImageResponse(getResponse);
+  } catch (error) {
+    console.warn("Unable to verify MFC image with GET", error);
+    return false;
+  }
+};
+
+const resolveFullSizeMfcImageUrl = async (value) => {
+  const original = canonicalizeMfcImageUrl(value);
+  const upgraded = buildFullSizeMfcImageUrl(value);
+  if (!upgraded) return null;
+  if (!shouldVerifyMfcImageUpgrade(original, upgraded)) return upgraded;
+
+  return (await mfcImageExists(upgraded)) ? upgraded : original;
+};
+
 const extractElementsByClassNames = (html, tagName, classNames) => {
   const sections = [];
   const tagRegex = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
@@ -1074,14 +1155,14 @@ const normalizeImageCandidateRecords = (value) => {
   return collectImageCandidateRecords(value);
 };
 
-const pickMfcImages = (...candidateGroups) => {
+const pickMfcImages = async (...candidateGroups) => {
   const candidates = candidateGroups.flatMap((group) => normalizeImageCandidateRecords(group));
   const seenUrls = new Set();
   const seenImageKeys = new Set();
   const images = [];
 
   for (const candidate of candidates) {
-    const fullSize = buildFullSizeMfcImageUrl(candidate.url);
+    const fullSize = await resolveFullSizeMfcImageUrl(candidate.url);
     if (!fullSize || seenUrls.has(fullSize)) continue;
 
     const uploadImage = parseMfcUploadImage(fullSize);
@@ -1200,7 +1281,7 @@ const isCloudflareChallenge = (html) => {
   return false;
 };
 
-const parseMfcHtml = (html) => {
+const parseMfcHtml = async (html) => {
   const metaName = extractMeta(html, "property", "og:title");
   const metaImage = extractMeta(html, "property", "og:image");
   const metaDescription = extractMeta(html, "property", "og:description");
@@ -1262,7 +1343,7 @@ const parseMfcHtml = (html) => {
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
   const scopedImageCandidates = extractScopedMfcImageCandidates(html);
-  const combinedImages = scopedImageCandidates.length ? pickMfcImages(scopedImageCandidates) : [];
+  const combinedImages = scopedImageCandidates.length ? await pickMfcImages(scopedImageCandidates) : [];
   const combinedImage = combinedImages[0] ?? null;
   const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
   const combinedManufacturer =
@@ -1317,7 +1398,7 @@ const fetchMfcDetails = async (itemId) => {
     };
   }
 
-  const parsed = parseMfcHtml(html);
+  const parsed = await parseMfcHtml(html);
   if (
     !parsed ||
     Object.values(parsed).every(
