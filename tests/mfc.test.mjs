@@ -4,7 +4,7 @@ const worker = await import('../worker.js');
 
 const sampleHtml = `<!DOCTYPE html><html><head>
 <meta property="og:title" content="Rem" />
-<meta property="og:image" content="https://static.myfigurecollection.net/pics/figure/small/1685257.jpg?rev=old" />
+<meta property="og:image" content="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" />
 <meta property="og:description" content="Rem figure with blue hair." />
 <meta name="keywords" content="rem, demon, Re:Zero as Franchise" />
 <script type="application/ld+json">
@@ -13,8 +13,8 @@ const sampleHtml = `<!DOCTYPE html><html><head>
   "@type": "Product",
   "name": "Rem",
   "image": [
-    "https://static.myfigurecollection.net/pics/figure/regular/1685257.jpg?rev=older",
-    { "contentUrl": "https://static.myfigurecollection.net/pics/figure/large/1685257.jpg?rev=older" }
+    "https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=older",
+    { "contentUrl": "https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg?rev=older" }
   ],
   "description": "Rem figure with blue hair.",
   "brand": { "@type": "Organization", "name": "SEGA as Manufacturer" },
@@ -25,7 +25,8 @@ const sampleHtml = `<!DOCTYPE html><html><head>
 }
 </script>
 </head><body>
-<img src="https://static.myfigurecollection.net/pics/figure/tiny/1685257.jpg?rev=old" />
+<img src="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" />
+<img src="https://static.myfigurecollection.net/upload/items/2/1685257-second.jpg?rev=best" />
 </body></html>`;
 
 const originalFetch = globalThis.fetch;
@@ -55,7 +56,7 @@ try {
   const payload = await response.json();
 
   assert.equal(payload.name, 'Rem');
-  assert.equal(payload.image, 'https://static.myfigurecollection.net/pics/figure/big/1685257.jpg');
+  assert.equal(payload.image, 'https://static.myfigurecollection.net/upload/items/2/1685257-second.jpg');
   assert.equal(payload.description, 'Rem figure with blue hair.');
   assert.equal(payload.caption, 'Rem figure with blue hair.');
   assert.equal(payload.series, 'Re:Zero kara Hajimeru Isekai Seikatsu');

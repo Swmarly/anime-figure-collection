@@ -874,6 +874,28 @@ const normalizeMfcImageUrl = (value) => {
   return decoded.startsWith("//") ? `https:${decoded}` : decoded;
 };
 
+const parseMfcUploadItemImage = (value) => {
+  const normalized = normalizeMfcImageUrl(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    if (!url.hostname.toLowerCase().endsWith("myfigurecollection.net")) {
+      return null;
+    }
+
+    const match = url.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
+    if (!match) return null;
+
+    return {
+      size: Number(match[1]),
+      imageKey: match[2],
+    };
+  } catch {
+    return null;
+  }
+};
+
 const buildFullSizeMfcImageUrl = (value) => {
   const normalized = normalizeMfcImageUrl(value);
   if (!normalized) return null;
@@ -887,6 +909,7 @@ const buildFullSizeMfcImageUrl = (value) => {
 
     url.protocol = "https:";
     url.pathname = url.pathname
+      .replace(/\/upload\/items\/\d+\/([^/]+)$/i, "/upload/items/2/$1")
       .replace(
         /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
         "/pics/$1/big/$2",
@@ -936,15 +959,37 @@ const pickBestMfcImage = (...candidateGroups) => {
     Array.isArray(group) ? group : collectImageCandidates(group),
   );
 
-  const seen = new Set();
+  const seenUrls = new Set();
+  const records = [];
   for (const candidate of candidates) {
     const fullSize = buildFullSizeMfcImageUrl(candidate);
-    if (!fullSize || seen.has(fullSize)) continue;
-    seen.add(fullSize);
-    return fullSize;
+    if (!fullSize || seenUrls.has(fullSize)) continue;
+    seenUrls.add(fullSize);
+    records.push({
+      fullSize,
+      uploadImage: parseMfcUploadItemImage(fullSize),
+    });
   }
 
-  return null;
+  const uploadImageKeys = [];
+  for (const record of records) {
+    const imageKey = record.uploadImage?.imageKey;
+    if (imageKey && !uploadImageKeys.includes(imageKey)) {
+      uploadImageKeys.push(imageKey);
+    }
+  }
+
+  if (uploadImageKeys.length > 1) {
+    const secondImageKey = uploadImageKeys[1];
+    const secondImageRecord = records.find(
+      (record) => record.uploadImage?.imageKey === secondImageKey,
+    );
+    if (secondImageRecord) {
+      return secondImageRecord.fullSize;
+    }
+  }
+
+  return records[0]?.fullSize ?? null;
 };
 
 const parseKeywords = (...values) => {
