@@ -14,6 +14,7 @@ export type Figure = {
   scale?: string;
   releaseDate?: string;
   image?: string;
+  images?: string[];
   alt?: string;
   caption?: string;
   description?: string;

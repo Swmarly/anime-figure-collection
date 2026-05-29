@@ -1074,50 +1074,28 @@ const normalizeImageCandidateRecords = (value) => {
   return collectImageCandidateRecords(value);
 };
 
-const isVeryLowResolutionMfcImage = (record) => {
-  const width = normalizeImageDimension(record.width);
-  const height = normalizeImageDimension(record.height);
-  if (!width || !height) return false;
-  return Math.max(width, height) < 900 || width * height < 450000;
-};
-
-const pickBestMfcImage = (...candidateGroups) => {
+const pickMfcImages = (...candidateGroups) => {
   const candidates = candidateGroups.flatMap((group) => normalizeImageCandidateRecords(group));
-
   const seenUrls = new Set();
-  const records = [];
+  const seenImageKeys = new Set();
+  const images = [];
+
   for (const candidate of candidates) {
     const fullSize = buildFullSizeMfcImageUrl(candidate.url);
     if (!fullSize || seenUrls.has(fullSize)) continue;
-    seenUrls.add(fullSize);
-    records.push({
-      fullSize,
-      uploadImage: parseMfcUploadImage(fullSize),
-      width: candidate.width ?? null,
-      height: candidate.height ?? null,
-    });
-  }
 
-  if (!records.length) return null;
-
-  const distinctImageRecords = [];
-  const seenImageKeys = new Set();
-  for (const record of records) {
-    const imageKey = record.uploadImage?.imageKey || record.fullSize;
+    const uploadImage = parseMfcUploadImage(fullSize);
+    const imageKey = uploadImage?.imageKey || fullSize;
     if (seenImageKeys.has(imageKey)) continue;
+
+    seenUrls.add(fullSize);
     seenImageKeys.add(imageKey);
-    distinctImageRecords.push(record);
+    images.push(fullSize);
   }
 
-  const firstImage = distinctImageRecords[0];
-  const secondImage = distinctImageRecords[1] ?? null;
-
-  if (secondImage && isVeryLowResolutionMfcImage(firstImage)) {
-    return secondImage.fullSize;
-  }
-
-  return firstImage?.fullSize ?? records[0].fullSize;
+  return images;
 };
+
 
 const parseKeywords = (...values) => {
   const raw = values.flatMap((value) => flattenToStrings(value));
@@ -1284,7 +1262,8 @@ const parseMfcHtml = (html) => {
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
   const scopedImageCandidates = extractScopedMfcImageCandidates(html);
-  const combinedImage = scopedImageCandidates.length ? pickBestMfcImage(scopedImageCandidates) : null;
+  const combinedImages = scopedImageCandidates.length ? pickMfcImages(scopedImageCandidates) : [];
+  const combinedImage = combinedImages[0] ?? null;
   const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
   const combinedManufacturer =
     htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
@@ -1296,6 +1275,7 @@ const parseMfcHtml = (html) => {
   return {
     name: combinedName,
     image: combinedImage,
+    images: combinedImages,
     description: combinedDescription,
     caption: summarizeText(combinedDescription),
     series: combinedSeries,

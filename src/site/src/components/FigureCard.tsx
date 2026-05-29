@@ -1,11 +1,12 @@
-import { formatReleaseDate, getFigureAlt, getFigureImage, getMfcLink } from "../lib/collection";
+import { formatReleaseDate, getFigureAlt, getFigureImage, getFigureImages, getMfcLink } from "../lib/collection";
 import type { Figure, FigureStatus } from "../types";
 import { Icon } from "./Icon";
+import type { LightboxImage } from "./Lightbox";
 
 type FigureCardProps = {
   figure: Figure;
   status: FigureStatus;
-  onImageOpen?: (image: { src: string; alt: string; title: string; meta?: string }) => void;
+  onImageOpen?: (image: LightboxImage) => void;
 };
 
 const statusLabels: Record<FigureStatus, string> = {
@@ -14,6 +15,7 @@ const statusLabels: Record<FigureStatus, string> = {
 };
 
 export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => {
+  const images = getFigureImages(figure);
   const image = getFigureImage(figure);
   const mfcLink = getMfcLink(figure);
   const title = figure.name?.trim() || "Untitled figure";
@@ -35,6 +37,8 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
             onClick={() =>
               onImageOpen?.({
                 src: image,
+                images,
+                initialIndex: 0,
                 alt: getFigureAlt(figure),
                 title,
                 meta: figure.series

@@ -982,16 +982,51 @@ img { max-width: 100%; }
   box-shadow: 0 24px 90px rgba(0, 0, 0, 0.45);
 }
 
-.lightbox__panel img {
-  display: block;
-  width: 100%;
-  max-height: min(78vh, 860px);
-  object-fit: contain;
+.lightbox__image-wrap {
+  position: relative;
+  display: grid;
+  min-height: min(68vh, 720px);
+  place-items: center;
   background:
     linear-gradient(90deg, rgba(74, 174, 232, 0.12) 1px, transparent 1px) 0 0 / 34px 34px,
     linear-gradient(rgba(74, 174, 232, 0.12) 1px, transparent 1px) 0 0 / 34px 34px,
     var(--panel-strong);
 }
+
+.lightbox__panel img {
+  display: block;
+  width: 100%;
+  max-height: min(78vh, 860px);
+  object-fit: contain;
+}
+
+.lightbox__nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: clamp(2.6rem, 5vw, 3.5rem);
+  height: clamp(2.6rem, 5vw, 3.5rem);
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 999px;
+  background: rgba(17, 25, 44, 0.78);
+  color: #fff8df;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  box-shadow: 0 16px 38px rgba(25, 34, 58, 0.24);
+}
+
+.lightbox__nav:hover,
+.lightbox__nav:focus-visible,
+.lightbox__close:hover,
+.lightbox__close:focus-visible {
+  background: rgba(110, 98, 149, 0.92);
+}
+
+.lightbox__nav--prev { left: clamp(0.7rem, 2vw, 1.3rem); }
+.lightbox__nav--next { right: clamp(0.7rem, 2vw, 1.3rem); }
 
 .lightbox__close {
   position: absolute;
@@ -1029,6 +1064,19 @@ img { max-width: 100%; }
   color: var(--muted);
 }
 
+.lightbox__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.lightbox__counter {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .lightbox figcaption a {
   display: inline-flex;
   align-items: center;
@@ -1051,7 +1099,7 @@ img { max-width: 100%; }
   background: rgba(3, 8, 20, 0.84);
 }
 
-:root[data-theme="dark"] .lightbox__panel img {
+:root[data-theme="dark"] .lightbox__image-wrap {
   background:
     linear-gradient(90deg, rgba(124, 199, 255, 0.12) 1px, transparent 1px) 0 0 / 34px 34px,
     linear-gradient(rgba(124, 199, 255, 0.12) 1px, transparent 1px) 0 0 / 34px 34px,
@@ -1093,6 +1141,7 @@ img { max-width: 100%; }
   .notice button { align-self: flex-start; }
   .sticker-cloud { opacity: 0.42; }
   .lightbox figcaption { align-items: flex-start; flex-direction: column; }
+  .lightbox__actions { width: 100%; justify-content: space-between; }
 }
 
 @media (prefers-reduced-motion: reduce) {

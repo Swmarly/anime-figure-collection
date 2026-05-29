@@ -74,8 +74,12 @@ try {
   assert.equal(lowResolutionPayload.name, 'Rem');
   assert.equal(
     lowResolutionPayload.image,
-    'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
+    'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
   );
+  assert.deepEqual(lowResolutionPayload.images, [
+    'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
+    'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
+  ]);
   assert.equal(lowResolutionPayload.description, 'Rem figure with blue hair.');
   assert.equal(lowResolutionPayload.caption, 'Rem figure with blue hair.');
   assert.equal(lowResolutionPayload.series, 'Re:Zero kara Hajimeru Isekai Seikatsu');
@@ -98,6 +102,10 @@ try {
     highResolutionPayload.image,
     'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
   );
+  assert.deepEqual(highResolutionPayload.images, [
+    'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
+    'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
+  ]);
 
   console.log('MFC lookup parsing test passed');
 } finally {

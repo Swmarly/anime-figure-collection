@@ -83,7 +83,18 @@ export const formatReleaseDate = (value?: string): string => {
 export const getFigureId = (figure: Figure, status: FigureStatus, index: number): string =>
   figure.slug || figure.id || `${status}-${figure.name ?? "figure"}-${index}`;
 
-export const getFigureImage = (figure: Figure): string | null => figure.image?.trim() || null;
+export const getFigureImages = (figure: Figure): string[] => {
+  const images = [
+    ...(Array.isArray(figure.images) ? figure.images : []),
+    figure.image
+  ]
+    .map((image) => image?.trim())
+    .filter((image): image is string => Boolean(image));
+
+  return Array.from(new Set(images));
+};
+
+export const getFigureImage = (figure: Figure): string | null => getFigureImages(figure)[0] ?? null;
 
 export const getFigureAlt = (figure: Figure): string =>
   figure.alt?.trim() || (figure.name ? `${figure.name} anime figure` : "Anime figure");

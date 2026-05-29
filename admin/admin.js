@@ -160,6 +160,7 @@ const state = {
   editing: null,
   saving: false,
   bulkRefreshingImages: false,
+  formImages: [],
   lastSavedAt: null,
   lastError: null,
   savePromise: null,
@@ -340,6 +341,25 @@ const normalizeTags = (value) => {
     .filter(Boolean);
 };
 
+
+const normalizeImageList = (...values) => {
+  const images = values
+    .flatMap((value) => {
+      if (!value) return [];
+      return Array.isArray(value) ? value : [value];
+    })
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+
+  return Array.from(new Set(images));
+};
+
+const imageListsMatch = (first, second) => {
+  const firstImages = normalizeImageList(first);
+  const secondImages = normalizeImageList(second);
+  return firstImages.length === secondImages.length && firstImages.every((image, index) => image === secondImages[index]);
+};
+
 const compactEntry = (entry) => {
   const keepEmpty = new Set(["tags"]);
   return Object.entries(entry).reduce((acc, [key, value]) => {
@@ -392,6 +412,7 @@ const readForm = () => {
     scale: fields.scale.value,
     releaseDate: fields.releaseDate.value,
     image: fields.image.value,
+    images: normalizeImageList(fields.image.value, state.formImages),
     caption: fields.caption.value,
     description: fields.description.value,
     tags: normalizeTags(fields.tags.value),
@@ -720,6 +741,7 @@ const resetForm = ({ keepLookup = false } = {}) => {
     lookupFeedback.textContent = "";
   }
   fields.list.value = "owned";
+  state.formImages = [];
   state.editing = null;
   renderPreview();
   renderManager();
@@ -745,7 +767,9 @@ const applyEntryToForm = (entry = {}) => {
   if (entry.manufacturer) fields.manufacturer.value = entry.manufacturer;
   if (entry.scale) fields.scale.value = entry.scale;
   if (entry.releaseDate) fields.releaseDate.value = entry.releaseDate;
+  state.formImages = normalizeImageList(entry.images, entry.image);
   if (entry.image) fields.image.value = entry.image;
+  if (!entry.image && state.formImages[0]) fields.image.value = state.formImages[0];
   if (entry.caption) fields.caption.value = entry.caption;
   if (entry.description) fields.description.value = entry.description;
   if (entry.tags) fields.tags.value = Array.isArray(entry.tags)
@@ -1128,7 +1152,7 @@ const wait = (milliseconds) =>
 const waitBeforeNextBulkRefresh = (targetIndex, targetCount) =>
   targetIndex < targetCount - 1 ? wait(MFC_BULK_REFRESH_DELAY_MS) : Promise.resolve();
 
-const syncEditedImageUrl = async (itemId, imageUrl) => {
+const syncEditedImageUrl = async (itemId, imageUrl, images = []) => {
   if (!state.loaded || !state.editing) {
     return null;
   }
@@ -1151,6 +1175,7 @@ const syncEditedImageUrl = async (itemId, imageUrl) => {
       ...entries[index],
       mfcId: Number.isFinite(numericMfcId) ? numericMfcId : entries[index].mfcId,
       image: imageUrl,
+      images: normalizeImageList(imageUrl, images),
     }),
   );
 
@@ -1180,7 +1205,7 @@ const getMfcImageRefreshTargets = () =>
       .filter(({ itemId }) => Boolean(itemId));
   });
 
-const updateEntryImageFromMfc = ({ list, index, entry, itemId }, imageUrl) => {
+const updateEntryImageFromMfc = ({ list, index, entry, itemId }, imageUrl, images = []) => {
   const entries = state.collection[list];
   if (!Array.isArray(entries) || !entries[index]) {
     return null;
@@ -1194,6 +1219,7 @@ const updateEntryImageFromMfc = ({ list, index, entry, itemId }, imageUrl) => {
       mfc: `https://myfigurecollection.net/item/${itemId}`,
     },
     image: imageUrl,
+    images: normalizeImageList(imageUrl, images),
   });
   entries.splice(index, 1, updatedEntry);
 
@@ -1241,15 +1267,17 @@ const handleRefreshAllMfcImages = async () => {
       lookupFeedback.textContent = `Refreshing image ${targetIndex + 1}/${targets.length}: ${label}…`;
 
       const currentImage = typeof target.entry.image === "string" ? target.entry.image.trim() : "";
+      const currentImages = normalizeImageList(target.entry.images, currentImage);
       const localFullSizeImage = buildFullSizeMfcImageUrl(currentImage);
 
       try {
         const data = await fetchMfcDetails(target.itemId);
-        const latestImage = typeof data.image === "string" ? data.image.trim() : "";
+        const latestImages = normalizeImageList(data.images, data.image);
+        const latestImage = latestImages[0] || "";
 
         if (!latestImage) {
           if (localFullSizeImage && localFullSizeImage !== currentImage) {
-            const updatedEntry = updateEntryImageFromMfc(target, localFullSizeImage);
+            const updatedEntry = updateEntryImageFromMfc(target, localFullSizeImage, [localFullSizeImage]);
             if (updatedEntry) {
               updatedCount += 1;
               localFallbackCount += 1;
@@ -1269,8 +1297,8 @@ const handleRefreshAllMfcImages = async () => {
           continue;
         }
 
-        if (latestImage !== currentImage) {
-          const updatedEntry = updateEntryImageFromMfc(target, latestImage);
+        if (latestImage !== currentImage || !imageListsMatch(currentImages, latestImages)) {
+          const updatedEntry = updateEntryImageFromMfc(target, latestImage, latestImages);
           if (updatedEntry) {
             updatedCount += 1;
             state.additions.unshift({
@@ -1373,7 +1401,8 @@ const handleRefreshMfcImage = async () => {
 
   try {
     const data = await fetchMfcDetails(itemId);
-    const latestImage = typeof data.image === "string" ? data.image.trim() : "";
+    const latestImages = normalizeImageList(data.images, data.image);
+    const latestImage = latestImages[0] || "";
 
     if (!latestImage) {
       lookupFeedback.textContent = "MyFigureCollection did not return an image URL for this item.";
@@ -1381,20 +1410,22 @@ const handleRefreshMfcImage = async () => {
     }
 
     const previousImage = fields.image.value.trim();
-    const changed = previousImage !== latestImage;
+    const previousImages = normalizeImageList(state.formImages, previousImage);
+    const changed = previousImage !== latestImage || !imageListsMatch(previousImages, latestImages);
 
     lookupInput.value = itemId;
     fields.mfcId.value = itemId;
     fields.image.value = latestImage;
+    state.formImages = latestImages;
     renderPreview();
 
     if (!changed) {
       lookupFeedback.textContent =
-        "Image URL already matches the latest MyFigureCollection image.";
+        "Image URLs already match the latest MyFigureCollection gallery.";
       return;
     }
 
-    const syncResult = await syncEditedImageUrl(itemId, latestImage);
+    const syncResult = await syncEditedImageUrl(itemId, latestImage, latestImages);
     if (syncResult?.updatedAt) {
       lookupFeedback.textContent = `Image URL refreshed from MyFigureCollection and synced at ${formatSavedTimestamp(
         syncResult.updatedAt,
@@ -1441,7 +1472,11 @@ const handleLookup = async (event) => {
     fields.manufacturer.value = data.manufacturer ?? fields.manufacturer.value;
     fields.scale.value = data.scale ?? fields.scale.value;
     fields.releaseDate.value = data.releaseDate ?? fields.releaseDate.value;
-    fields.image.value = data.image ?? fields.image.value;
+    const importedImages = normalizeImageList(data.images, data.image);
+    if (importedImages.length) {
+      state.formImages = importedImages;
+      fields.image.value = importedImages[0];
+    }
     fields.caption.value = data.caption ?? fields.caption.value;
     fields.description.value = data.description ?? fields.description.value;
 

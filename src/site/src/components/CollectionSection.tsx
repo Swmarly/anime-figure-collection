@@ -3,6 +3,7 @@ import { filterFigures, getFigureId, sortFigures } from "../lib/collection";
 import type { Figure, FigureStatus, SortKey } from "../types";
 import { CollectionControls } from "./CollectionControls";
 import { FigureCard } from "./FigureCard";
+import type { LightboxImage } from "./Lightbox";
 
 type CollectionSectionProps = {
   status: FigureStatus;
@@ -12,7 +13,7 @@ type CollectionSectionProps = {
   isLoading: boolean;
   onQueryChange: (query: string) => void;
   onSortChange: (sortKey: SortKey) => void;
-  onImageOpen?: (image: { src: string; alt: string; title: string; meta?: string }) => void;
+  onImageOpen?: (image: LightboxImage) => void;
 };
 
 const skeletonCards = Array.from({ length: 6 }, (_, index) => `skeleton-${index}`);
