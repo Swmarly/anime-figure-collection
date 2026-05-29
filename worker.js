@@ -993,7 +993,7 @@ const extractMfcPictureGalleryImages = (html) => {
 
     try {
       const parsed = JSON.parse(decoded);
-      candidates.push(...collectImageCandidates(parsed));
+      candidates.push(...collectImageCandidateRecords(parsed));
     } catch (error) {
       console.warn("Unable to parse MFC picture gallery metadata", error);
     }
@@ -1010,26 +1010,47 @@ const extractScopedMfcImageCandidates = (html) => {
   });
 };
 
-const collectImageCandidates = (value) => {
+const normalizeImageDimension = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+};
+
+const collectImageCandidateRecords = (value, inheritedDimensions = {}) => {
   if (!value) return [];
   if (Array.isArray(value)) {
-    return value.flatMap((item) => collectImageCandidates(item));
+    return value.flatMap((item) => collectImageCandidateRecords(item, inheritedDimensions));
   }
   if (typeof value === "object") {
+    const dimensions = {
+      width: normalizeImageDimension(value.width ?? value.w) ?? inheritedDimensions.width ?? null,
+      height: normalizeImageDimension(value.height ?? value.h) ?? inheritedDimensions.height ?? null,
+    };
+
     return [
-      ...collectImageCandidates(value.src),
-      ...collectImageCandidates(value.url),
-      ...collectImageCandidates(value.contentUrl),
-      ...collectImageCandidates(value.thumbnailUrl),
-      ...collectImageCandidates(value.image),
+      ...collectImageCandidateRecords(value.src, dimensions),
+      ...collectImageCandidateRecords(value.url, dimensions),
+      ...collectImageCandidateRecords(value.contentUrl, dimensions),
+      ...collectImageCandidateRecords(value.thumbnailUrl, dimensions),
+      ...collectImageCandidateRecords(value.image, dimensions),
     ];
   }
   if (typeof value === "string") {
     const normalized = normalizeMfcImageUrl(value);
-    return normalized ? [normalized] : [];
+    return normalized
+      ? [
+          {
+            url: normalized,
+            width: inheritedDimensions.width ?? null,
+            height: inheritedDimensions.height ?? null,
+          },
+        ]
+      : [];
   }
   return [];
 };
+
+const collectImageCandidates = (value) =>
+  collectImageCandidateRecords(value).map((candidate) => candidate.url);
 
 const extractImageUrlsFromHtml = (html) => {
   const urls = [];
@@ -1043,42 +1064,59 @@ const extractImageUrlsFromHtml = (html) => {
   return urls;
 };
 
+const normalizeImageCandidateRecords = (value) => {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeImageCandidateRecords(item));
+  }
+  if (value && typeof value === "object" && typeof value.url === "string") {
+    return [value];
+  }
+  return collectImageCandidateRecords(value);
+};
+
+const isVeryLowResolutionMfcImage = (record) => {
+  const width = normalizeImageDimension(record.width);
+  const height = normalizeImageDimension(record.height);
+  if (!width || !height) return false;
+  return Math.max(width, height) < 900 || width * height < 450000;
+};
+
 const pickBestMfcImage = (...candidateGroups) => {
-  const candidates = candidateGroups.flatMap((group) =>
-    Array.isArray(group) ? group : collectImageCandidates(group),
-  );
+  const candidates = candidateGroups.flatMap((group) => normalizeImageCandidateRecords(group));
 
   const seenUrls = new Set();
   const records = [];
   for (const candidate of candidates) {
-    const fullSize = buildFullSizeMfcImageUrl(candidate);
+    const fullSize = buildFullSizeMfcImageUrl(candidate.url);
     if (!fullSize || seenUrls.has(fullSize)) continue;
     seenUrls.add(fullSize);
     records.push({
       fullSize,
       uploadImage: parseMfcUploadImage(fullSize),
+      width: candidate.width ?? null,
+      height: candidate.height ?? null,
     });
   }
 
-  const uploadImageKeys = [];
+  if (!records.length) return null;
+
+  const distinctImageRecords = [];
+  const seenImageKeys = new Set();
   for (const record of records) {
-    const imageKey = record.uploadImage?.imageKey;
-    if (imageKey && !uploadImageKeys.includes(imageKey)) {
-      uploadImageKeys.push(imageKey);
-    }
+    const imageKey = record.uploadImage?.imageKey || record.fullSize;
+    if (seenImageKeys.has(imageKey)) continue;
+    seenImageKeys.add(imageKey);
+    distinctImageRecords.push(record);
   }
 
-  if (uploadImageKeys.length > 1) {
-    const secondImageKey = uploadImageKeys[1];
-    const secondImageRecord = records.find(
-      (record) => record.uploadImage?.imageKey === secondImageKey,
-    );
-    if (secondImageRecord) {
-      return secondImageRecord.fullSize;
-    }
+  const firstImage = distinctImageRecords[0];
+  const secondImage = distinctImageRecords[1] ?? null;
+
+  if (secondImage && isVeryLowResolutionMfcImage(firstImage)) {
+    return secondImage.fullSize;
   }
 
-  return records[0]?.fullSize ?? null;
+  return firstImage?.fullSize ?? records[0].fullSize;
 };
 
 const parseKeywords = (...values) => {
