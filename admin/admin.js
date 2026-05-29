@@ -1107,6 +1107,7 @@ const buildFullSizeMfcImageUrl = (value) => {
     url.protocol = "https:";
     url.pathname = url.pathname
       .replace(/\/upload\/items\/\d+\/([^/]+)$/i, "/upload/items/2/$1")
+      .replace(/\/upload\/pictures\/(.+?)\/thumbnails\/([^/]+)$/i, "/upload/pictures/$1/$2")
       .replace(
         /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
         "/pics/$1/big/$2",

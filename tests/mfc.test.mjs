@@ -25,8 +25,18 @@ const sampleHtml = `<!DOCTYPE html><html><head>
 }
 </script>
 </head><body>
-<img src="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" />
-<img src="https://static.myfigurecollection.net/upload/items/2/1685257-second.jpg?rev=best" />
+<img src="https://static.myfigurecollection.net/upload/items/2/wrong-related-figure.jpg" />
+<div class="split-left righter">
+  <div class="item-picture" style="width:168px">
+    <div class="tbx-pswp">
+      <a href="#" class="main" _index="0" title="Open official gallery">
+        <img src="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" alt="Rem" width="600" height="900" />
+      </a>
+      <meta name="pictures" content="%5B%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2Fitems%5C%2F2%5C%2F1685257-main.jpg%22%2C%22w%22%3A600%2C%22h%22%3A900%7D%2C%7B%22src%22%3A%22https%3A%5C%2F%5C%2Fstatic.myfigurecollection.net%5C%2Fupload%5C%2Fpictures%5C%2F2025%5C%2F07%5C%2F18%5C%2F1685257-second.jpeg%22%2C%22w%22%3A1280%2C%22h%22%3A1920%7D%5D" />
+      <a class="more" href="#" _index="1" style="background: url(&quot;https://static.myfigurecollection.net/upload/pictures/2025/07/18/thumbnails/1685257-second.jpeg&quot;) 0 0 / cover no-repeat transparent;"></a>
+    </div>
+  </div>
+</div>
 </body></html>`;
 
 const originalFetch = globalThis.fetch;
@@ -56,7 +66,7 @@ try {
   const payload = await response.json();
 
   assert.equal(payload.name, 'Rem');
-  assert.equal(payload.image, 'https://static.myfigurecollection.net/upload/items/2/1685257-second.jpg');
+  assert.equal(payload.image, 'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg');
   assert.equal(payload.description, 'Rem figure with blue hair.');
   assert.equal(payload.caption, 'Rem figure with blue hair.');
   assert.equal(payload.series, 'Re:Zero kara Hajimeru Isekai Seikatsu');

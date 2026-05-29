@@ -874,7 +874,7 @@ const normalizeMfcImageUrl = (value) => {
   return decoded.startsWith("//") ? `https:${decoded}` : decoded;
 };
 
-const parseMfcUploadItemImage = (value) => {
+const parseMfcUploadImage = (value) => {
   const normalized = normalizeMfcImageUrl(value);
   if (!normalized) return null;
 
@@ -884,13 +884,23 @@ const parseMfcUploadItemImage = (value) => {
       return null;
     }
 
-    const match = url.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
-    if (!match) return null;
+    const itemMatch = url.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
+    if (itemMatch) {
+      return {
+        size: Number(itemMatch[1]),
+        imageKey: `item:${itemMatch[2]}`,
+      };
+    }
 
-    return {
-      size: Number(match[1]),
-      imageKey: match[2],
-    };
+    const pictureMatch = url.pathname.match(/\/upload\/pictures\/(.+)$/i);
+    if (pictureMatch) {
+      return {
+        size: null,
+        imageKey: `picture:${pictureMatch[1].replace(/\/thumbnails\//i, "/")}`,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -910,6 +920,7 @@ const buildFullSizeMfcImageUrl = (value) => {
     url.protocol = "https:";
     url.pathname = url.pathname
       .replace(/\/upload\/items\/\d+\/([^/]+)$/i, "/upload/items/2/$1")
+      .replace(/\/upload\/pictures\/(.+?)\/thumbnails\/([^/]+)$/i, "/upload/pictures/$1/$2")
       .replace(
         /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
         "/pics/$1/big/$2",
@@ -922,6 +933,83 @@ const buildFullSizeMfcImageUrl = (value) => {
   }
 };
 
+const extractElementsByClassNames = (html, tagName, classNames) => {
+  const sections = [];
+  const tagRegex = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
+  let match;
+
+  while ((match = tagRegex.exec(html))) {
+    const tag = match[0];
+    const classMatch = /class\s*=\s*(["'])([^"']*)\1/i.exec(tag);
+    const classes = classMatch ? classMatch[2].split(/\s+/).filter(Boolean) : [];
+    if (!classNames.every((className) => classes.includes(className))) {
+      continue;
+    }
+
+    const sectionStart = match.index;
+    let cursor = tagRegex.lastIndex;
+    let depth = 1;
+    const boundaryRegex = new RegExp(`</?${tagName}\\b[^>]*>`, "gi");
+    boundaryRegex.lastIndex = cursor;
+
+    let boundary;
+    while ((boundary = boundaryRegex.exec(html))) {
+      if (boundary[0].startsWith(`</${tagName}`)) {
+        depth -= 1;
+        if (depth === 0) {
+          sections.push(html.slice(sectionStart, boundaryRegex.lastIndex));
+          cursor = boundaryRegex.lastIndex;
+          break;
+        }
+      } else {
+        depth += 1;
+      }
+    }
+
+    tagRegex.lastIndex = cursor;
+  }
+
+  return sections;
+};
+
+const decodeAttributeValue = (value) => {
+  if (!value) return "";
+  const decoded = decodeHtml(value);
+  try {
+    return decodeURIComponent(decoded);
+  } catch {
+    return decoded;
+  }
+};
+
+const extractMfcPictureGalleryImages = (html) => {
+  const candidates = [];
+  const metaRegex = /<meta[^>]+name\s*=\s*(["'])pictures\1[^>]+content\s*=\s*(["'])([\s\S]*?)\2[^>]*>/gi;
+  let match;
+
+  while ((match = metaRegex.exec(html))) {
+    const decoded = decodeAttributeValue(match[3]);
+    if (!decoded) continue;
+
+    try {
+      const parsed = JSON.parse(decoded);
+      candidates.push(...collectImageCandidates(parsed));
+    } catch (error) {
+      console.warn("Unable to parse MFC picture gallery metadata", error);
+    }
+  }
+
+  return candidates;
+};
+
+const extractScopedMfcImageCandidates = (html) => {
+  const sections = extractElementsByClassNames(html, "div", ["split-left", "righter"]);
+  return sections.flatMap((section) => {
+    const galleryImages = extractMfcPictureGalleryImages(section);
+    return galleryImages.length ? galleryImages : extractImageUrlsFromHtml(section);
+  });
+};
+
 const collectImageCandidates = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -929,6 +1017,7 @@ const collectImageCandidates = (value) => {
   }
   if (typeof value === "object") {
     return [
+      ...collectImageCandidates(value.src),
       ...collectImageCandidates(value.url),
       ...collectImageCandidates(value.contentUrl),
       ...collectImageCandidates(value.thumbnailUrl),
@@ -967,7 +1056,7 @@ const pickBestMfcImage = (...candidateGroups) => {
     seenUrls.add(fullSize);
     records.push({
       fullSize,
-      uploadImage: parseMfcUploadItemImage(fullSize),
+      uploadImage: parseMfcUploadImage(fullSize),
     });
   }
 
@@ -1156,13 +1245,8 @@ const parseMfcHtml = (html) => {
 
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
-  const combinedImage = pickBestMfcImage(
-    productImageCandidates,
-    metaImage,
-    extractMeta(html, "name", "twitter:image"),
-    extractMeta(html, "property", "twitter:image"),
-    extractImageUrlsFromHtml(html),
-  );
+  const scopedImageCandidates = extractScopedMfcImageCandidates(html);
+  const combinedImage = scopedImageCandidates.length ? pickBestMfcImage(scopedImageCandidates) : null;
   const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
   const combinedManufacturer =
     htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
