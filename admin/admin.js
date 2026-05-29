@@ -1085,6 +1085,47 @@ const formatSavedTimestamp = (value) => {
   return Number.isNaN(savedDate.getTime()) ? value : savedDate.toLocaleString();
 };
 
+const MFC_BULK_REFRESH_DELAY_MS = 1600;
+
+const normalizeMfcImageUrl = (value) => {
+  if (!value || typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith("data:")) return "";
+  return trimmed.startsWith("//") ? `https:${trimmed}` : trimmed;
+};
+
+const buildFullSizeMfcImageUrl = (value) => {
+  const normalized = normalizeMfcImageUrl(value);
+  if (!normalized) return "";
+
+  try {
+    const url = new URL(normalized);
+    if (!url.hostname.toLowerCase().endsWith("myfigurecollection.net")) {
+      return normalized;
+    }
+
+    url.protocol = "https:";
+    url.pathname = url.pathname
+      .replace(
+        /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
+        "/pics/$1/big/$2",
+      )
+      .replace(/\/pics\/(figure|picture)\/([^/]+)$/i, "/pics/$1/big/$2");
+    url.search = "";
+    return url.toString();
+  } catch {
+    return normalized;
+  }
+};
+
+const wait = (milliseconds) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+
+const waitBeforeNextBulkRefresh = (targetIndex, targetCount) =>
+  targetIndex < targetCount - 1 ? wait(MFC_BULK_REFRESH_DELAY_MS) : Promise.resolve();
+
 const syncEditedImageUrl = async (itemId, imageUrl) => {
   if (!state.loaded || !state.editing) {
     return null;
@@ -1188,6 +1229,8 @@ const handleRefreshAllMfcImages = async () => {
   updateStatus();
 
   let updatedCount = 0;
+  let localFallbackCount = 0;
+  let blockedWithExistingImageCount = 0;
   const failures = [];
 
   try {
@@ -1195,13 +1238,32 @@ const handleRefreshAllMfcImages = async () => {
       const label = getEntryLabel(target.entry);
       lookupFeedback.textContent = `Refreshing image ${targetIndex + 1}/${targets.length}: ${label}…`;
 
+      const currentImage = typeof target.entry.image === "string" ? target.entry.image.trim() : "";
+      const localFullSizeImage = buildFullSizeMfcImageUrl(currentImage);
+
       try {
         const data = await fetchMfcDetails(target.itemId);
         const latestImage = typeof data.image === "string" ? data.image.trim() : "";
-        const currentImage = typeof target.entry.image === "string" ? target.entry.image.trim() : "";
 
         if (!latestImage) {
+          if (localFullSizeImage && localFullSizeImage !== currentImage) {
+            const updatedEntry = updateEntryImageFromMfc(target, localFullSizeImage);
+            if (updatedEntry) {
+              updatedCount += 1;
+              localFallbackCount += 1;
+              state.additions.unshift({
+                list: target.list,
+                entry: updatedEntry,
+                action: "updated",
+                from: null,
+              });
+            }
+            await waitBeforeNextBulkRefresh(targetIndex, targets.length);
+            continue;
+          }
+
           failures.push(`${label}: no image URL returned`);
+          await waitBeforeNextBulkRefresh(targetIndex, targets.length);
           continue;
         }
 
@@ -1221,14 +1283,33 @@ const handleRefreshAllMfcImages = async () => {
         if (error?.message === "Unauthorized") {
           throw error;
         }
+
+        if (localFullSizeImage && localFullSizeImage !== currentImage) {
+          const updatedEntry = updateEntryImageFromMfc(target, localFullSizeImage);
+          if (updatedEntry) {
+            updatedCount += 1;
+            localFallbackCount += 1;
+            state.additions.unshift({
+              list: target.list,
+              entry: updatedEntry,
+              action: "updated",
+              from: null,
+            });
+          }
+          await waitBeforeNextBulkRefresh(targetIndex, targets.length);
+          continue;
+        }
+
+        if (currentImage) {
+          blockedWithExistingImageCount += 1;
+          await waitBeforeNextBulkRefresh(targetIndex, targets.length);
+          continue;
+        }
+
         failures.push(`${label}: ${error.message || "Unable to refresh image"}`);
       }
 
-      if (targetIndex < targets.length - 1) {
-        await new Promise((resolve) => {
-          window.setTimeout(resolve, 300);
-        });
-      }
+      await waitBeforeNextBulkRefresh(targetIndex, targets.length);
     }
 
     state.additions = state.additions.slice(0, 20);
@@ -1236,6 +1317,12 @@ const handleRefreshAllMfcImages = async () => {
     renderManager();
     renderPreview();
 
+    const fallbackSummary = localFallbackCount
+      ? ` ${localFallbackCount} image URL${localFallbackCount === 1 ? "" : "s"} upgraded locally because MFC blocked or omitted the image.`
+      : "";
+    const blockedSummary = blockedWithExistingImageCount
+      ? ` ${blockedWithExistingImageCount} blocked by MFC; kept existing image URL${blockedWithExistingImageCount === 1 ? "" : "s"}.`
+      : "";
     const failureSummary = failures.length
       ? ` ${failures.length} failed: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? "…" : ""}`
       : "";
@@ -1246,11 +1333,11 @@ const handleRefreshAllMfcImages = async () => {
       const savedSuffix = result?.updatedAt
         ? ` Synced at ${formatSavedTimestamp(result.updatedAt)}.`
         : " Synced to Cloudflare.";
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${failureSummary}`;
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${fallbackSummary}${blockedSummary}${failureSummary}`;
     } else if (failures.length === targets.length) {
-      lookupFeedback.textContent = `Tried ${targets.length} MFC item${targets.length === 1 ? "" : "s"}, but every image refresh failed.${failureSummary}`;
+      lookupFeedback.textContent = `Tried ${targets.length} MFC item${targets.length === 1 ? "" : "s"}, but every image refresh failed.${blockedSummary}${failureSummary}`;
     } else {
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${failureSummary}`;
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${blockedSummary}${failureSummary}`;
     }
 
     if (failures.length) {
