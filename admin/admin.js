@@ -5,6 +5,7 @@ const lookupFeedback = document.getElementById("mfc-feedback");
 const clearLookupButton = document.getElementById("clear-mfc-data");
 const figureForm = document.getElementById("figure-form");
 const refreshMfcImageButton = document.getElementById("refresh-mfc-image");
+const refreshAllMfcImagesButton = document.getElementById("refresh-all-mfc-images");
 const resetFormButton = document.getElementById("reset-form");
 const copyEntryButton = document.getElementById("copy-entry");
 const downloadButton = document.getElementById("download-json");
@@ -17,6 +18,9 @@ const saveChangesButton = document.getElementById("save-changes");
 const saveButtonDefaultLabel = saveChangesButton
   ? saveChangesButton.textContent.trim() || "Save changes"
   : "Save changes";
+const refreshAllButtonDefaultLabel = refreshAllMfcImagesButton
+  ? refreshAllMfcImagesButton.textContent.trim() || "Refresh all MFC images"
+  : "Refresh all MFC images";
 
 const field = (id) => document.getElementById(id);
 
@@ -155,6 +159,7 @@ const state = {
   additions: [],
   editing: null,
   saving: false,
+  bulkRefreshingImages: false,
   lastSavedAt: null,
   lastError: null,
   savePromise: null,
@@ -469,6 +474,16 @@ const persistCollection = async () => {
   return saveTask;
 };
 
+const updateRefreshButtons = () => {
+  if (refreshAllMfcImagesButton) {
+    refreshAllMfcImagesButton.disabled =
+      !state.loaded || state.saving || state.bulkRefreshingImages;
+    refreshAllMfcImagesButton.textContent = state.bulkRefreshingImages
+      ? "Refreshing images…"
+      : refreshAllButtonDefaultLabel;
+  }
+};
+
 const updateSaveButton = () => {
   if (!saveChangesButton) return;
   if (!state.loaded) {
@@ -477,9 +492,9 @@ const updateSaveButton = () => {
     return;
   }
 
-  if (state.saving) {
+  if (state.saving || state.bulkRefreshingImages) {
     saveChangesButton.disabled = true;
-    saveChangesButton.textContent = "Saving…";
+    saveChangesButton.textContent = state.bulkRefreshingImages ? "Refreshing images…" : "Saving…";
     return;
   }
 
@@ -493,18 +508,21 @@ const updateStatus = () => {
   if (!state.loaded) {
     collectionStatus.textContent = "Loading collection…";
     updateSaveButton();
+    updateRefreshButtons();
     return;
   }
 
-  if (state.saving) {
-    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Saving…`;
+  if (state.saving || state.bulkRefreshingImages) {
+    collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · ${state.bulkRefreshingImages ? "Refreshing images…" : "Saving…"}`;
     updateSaveButton();
+    updateRefreshButtons();
     return;
   }
 
   if (state.lastError) {
     collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Sync failed`;
     updateSaveButton();
+    updateRefreshButtons();
     return;
   }
 
@@ -515,11 +533,13 @@ const updateStatus = () => {
       : date.toLocaleString();
     collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist · Last saved ${formatted}`;
     updateSaveButton();
+    updateRefreshButtons();
     return;
   }
 
   collectionStatus.textContent = `${owned} owned · ${wishlist} on wishlist`;
   updateSaveButton();
+  updateRefreshButtons();
 };
 
 const renderSessionLog = () => {
@@ -1089,6 +1109,129 @@ const syncEditedImageUrl = async (itemId, imageUrl) => {
   return persistCollection();
 };
 
+const getMfcImageRefreshTargets = () =>
+  ["owned", "wishlist"].flatMap((list) => {
+    const entries = state.collection[list];
+    if (!Array.isArray(entries)) {
+      return [];
+    }
+
+    return entries
+      .map((entry, index) => ({ list, index, entry }))
+      .filter(({ entry }) => entry?.mfcId !== undefined && entry?.mfcId !== null && entry.mfcId !== "");
+  });
+
+const updateEntryImageFromMfc = ({ list, index, entry }, imageUrl) => {
+  const entries = state.collection[list];
+  if (!Array.isArray(entries) || !entries[index]) {
+    return null;
+  }
+
+  const updatedEntry = compactEntry({ ...entries[index], image: imageUrl });
+  entries.splice(index, 1, updatedEntry);
+
+  if (state.editing && state.editing.list === list && identityMatches(updatedEntry, state.editing)) {
+    applyEntryToForm({ ...updatedEntry, list });
+  }
+
+  return updatedEntry;
+};
+
+const handleRefreshAllMfcImages = async () => {
+  if (!state.loaded) {
+    lookupFeedback.textContent = "Load the collection before refreshing all images.";
+    return;
+  }
+
+  const targets = getMfcImageRefreshTargets();
+  if (!targets.length) {
+    lookupFeedback.textContent = "No collection entries have an MFC item number to refresh.";
+    return;
+  }
+
+  const confirmed =
+    typeof window.confirm === "function"
+      ? window.confirm(`Refresh MFC image URLs for ${targets.length} figure${targets.length === 1 ? "" : "s"}?`)
+      : true;
+
+  if (!confirmed) {
+    lookupFeedback.textContent = "Bulk image refresh cancelled.";
+    return;
+  }
+
+  state.bulkRefreshingImages = true;
+  state.lastError = null;
+  updateStatus();
+
+  let updatedCount = 0;
+  const failures = [];
+
+  try {
+    for (const [targetIndex, target] of targets.entries()) {
+      const label = getEntryLabel(target.entry);
+      lookupFeedback.textContent = `Refreshing image ${targetIndex + 1}/${targets.length}: ${label}…`;
+
+      try {
+        const data = await fetchMfcDetails(String(target.entry.mfcId));
+        const latestImage = typeof data.image === "string" ? data.image.trim() : "";
+        const currentImage = typeof target.entry.image === "string" ? target.entry.image.trim() : "";
+
+        if (latestImage && latestImage !== currentImage) {
+          const updatedEntry = updateEntryImageFromMfc(target, latestImage);
+          if (updatedEntry) {
+            updatedCount += 1;
+            state.additions.unshift({
+              list: target.list,
+              entry: updatedEntry,
+              action: "updated",
+              from: null,
+            });
+          }
+        }
+      } catch (error) {
+        if (error?.message === "Unauthorized") {
+          throw error;
+        }
+        failures.push(`${label}: ${error.message || "Unable to refresh image"}`);
+      }
+    }
+
+    state.additions = state.additions.slice(0, 20);
+    renderSessionLog();
+    renderManager();
+    renderPreview();
+
+    if (updatedCount > 0) {
+      lookupFeedback.textContent = `Updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}. Saving to Cloudflare…`;
+      const result = await persistCollection();
+      const savedSuffix = result?.updatedAt
+        ? ` Synced at ${formatSavedTimestamp(result.updatedAt)}.`
+        : " Synced to Cloudflare.";
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${
+        failures.length ? ` ${failures.length} failed.` : ""
+      }`;
+    } else {
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${
+        failures.length ? ` ${failures.length} failed.` : ""
+      }`;
+    }
+
+    if (failures.length) {
+      console.warn("Some MFC image refreshes failed", failures);
+    }
+  } catch (error) {
+    if (error?.message === "Unauthorized") {
+      lookupFeedback.textContent = SESSION_EXPIRED_MESSAGE;
+      return;
+    }
+
+    lookupFeedback.textContent = `Bulk image refresh stopped: ${error.message || "Unable to refresh images."}`;
+  } finally {
+    state.bulkRefreshingImages = false;
+    updateStatus();
+  }
+};
+
 const handleRefreshMfcImage = async () => {
   const itemId = getCurrentMfcItemId();
   if (!itemId) {
@@ -1368,6 +1511,9 @@ if (fields.slug) {
 
 lookupForm.addEventListener("submit", handleLookup);
 refreshMfcImageButton.addEventListener("click", handleRefreshMfcImage);
+if (refreshAllMfcImagesButton) {
+  refreshAllMfcImagesButton.addEventListener("click", handleRefreshAllMfcImages);
+}
 clearLookupButton.addEventListener("click", () => {
   lookupInput.value = "";
   lookupFeedback.textContent = "Lookup fields cleared.";
@@ -1436,6 +1582,7 @@ if (manager) {
 }
 
 updateSaveButton();
+updateRefreshButtons();
 
 fetchCollection().then(() => {
   renderPreview();
