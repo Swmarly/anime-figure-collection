@@ -2,32 +2,32 @@ import type { SortKey } from "./types";
 
 export const siteConfig = {
   owner: "Swmarly",
-  title: "Swmarly's Figure Vault",
-  eyebrow: "Curated anime figure archive",
+  title: "Swmarly's figure shelf",
+  eyebrow: "♡ little shelf diary ♡",
   description:
-    "A polished display case for owned anime figures, grails, and wishlist targets synced from the collection admin panel.",
-  primaryAction: { label: "Explore collection", target: "collection" },
-  secondaryAction: { label: "Open wishlist", target: "wishlist" },
+    "A soft, cozy catalog for my anime figures: the cuties already on display, the grails I am saving for, and every tiny shelf upgrade in between.",
+  primaryAction: { label: "See the shelf", target: "collection" },
+  secondaryAction: { label: "Peek at wishlist", target: "wishlist" },
   adminPath: "/admin",
-  footerNote: "Made with care for every shelf upgrade.",
+  footerNote: "Made with love, shelf dusting, and way too many preorders ♡",
   emptyStates: {
-    owned: "No figures are on display yet. Add your first entry in the admin panel.",
-    wishlist: "The wishlist is empty for now. Save future grails in the admin panel."
+    owned: "The display shelf is waiting for its first cutie. Add one in the admin panel.",
+    wishlist: "No grails are pinned yet. Save future dream figures in the admin panel."
   }
 } as const;
 
 export const sectionContent = {
   owned: {
     id: "collection",
-    kicker: "On the shelf",
-    title: "Owned collection",
-    description: "Figures currently cataloged in the display cabinet."
+    kicker: "in the cabinet",
+    title: "My figure shelf",
+    description: "The figures currently living rent-free in the display case."
   },
   wishlist: {
     id: "wishlist",
-    kicker: "Future hunts",
-    title: "Wishlist targets",
-    description: "Figures marked as goals, grails, or planned additions."
+    kicker: "dream shelf",
+    title: "Wishlist cuties",
+    description: "Grails, maybes, and future preorders I keep daydreaming about."
   }
 } as const;
 

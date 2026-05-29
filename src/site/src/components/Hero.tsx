@@ -12,10 +12,10 @@ const scrollToSection = (target: string) => {
 };
 
 const formatUpdatedAt = (value?: string | null): string => {
-  if (!value) return "Synced on demand";
+  if (!value) return "ready for new shelf photos";
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return "Recently synced";
-  return `Synced ${new Intl.DateTimeFormat(undefined, {
+  if (Number.isNaN(parsed)) return "recently tidied";
+  return `last shelf tidy · ${new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric"
@@ -43,10 +43,21 @@ export const Hero = ({ metrics, updatedAt }: HeroProps) => (
           {siteConfig.secondaryAction.label}
         </button>
       </div>
+      <ul className="hero__charms" aria-label="Collection notes">
+        <li>pastel display case</li>
+        <li>owned + wishlist</li>
+        <li>admin synced</li>
+      </ul>
     </div>
 
     <aside className="hero-panel" aria-label="Collection snapshot">
-      <div className="hero-panel__orb" aria-hidden="true" />
+      <div className="hero-panel__scene" aria-hidden="true">
+        <span className="hero-panel__moon">☾</span>
+        <span className="hero-panel__figure hero-panel__figure--pink" />
+        <span className="hero-panel__figure hero-panel__figure--blue" />
+        <span className="hero-panel__figure hero-panel__figure--cream" />
+        <span className="hero-panel__shelf" />
+      </div>
       <p>{formatUpdatedAt(updatedAt)}</p>
       <div className="metric-grid">
         {metrics.map((metric) => (

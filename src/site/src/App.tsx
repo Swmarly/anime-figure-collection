@@ -22,10 +22,12 @@ export const App = () => {
       </a>
       <div className="ambient ambient--one" aria-hidden="true" />
       <div className="ambient ambient--two" aria-hidden="true" />
+      <div className="sticker-cloud sticker-cloud--one" aria-hidden="true">♡</div>
+      <div className="sticker-cloud sticker-cloud--two" aria-hidden="true">✧</div>
 
       <nav className="site-nav" aria-label="Primary navigation">
         <a className="brand" href="/" aria-label={`${siteConfig.title} home`}>
-          <span aria-hidden="true">✦</span>
+          <span aria-hidden="true">🎀</span>
           <span>{siteConfig.owner}</span>
         </a>
         <div className="site-nav__links">
