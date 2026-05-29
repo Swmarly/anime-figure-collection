@@ -2,32 +2,32 @@ import type { SortKey } from "./types";
 
 export const siteConfig = {
   owner: "Swmarly",
-  title: "Swmarly's figure shelf",
-  eyebrow: "♡ little shelf diary ♡",
+  title: "Swmarly's Figure Collection",
+  eyebrow: "Figure shelf log",
   description:
-    "A soft, cozy catalog for my anime figures: the cuties already on display, the grails I am saving for, and every tiny shelf upgrade in between.",
-  primaryAction: { label: "See the shelf", target: "collection" },
-  secondaryAction: { label: "Peek at wishlist", target: "wishlist" },
+    "A clean catalog of the anime figures I own, plus the wishlist entries I am tracking for future shelf updates.",
+  primaryAction: { label: "Browse collection", target: "collection" },
+  secondaryAction: { label: "View wishlist", target: "wishlist" },
   adminPath: "/admin",
-  footerNote: "Made with love, shelf dusting, and way too many preorders ♡",
+  footerNote: "Collection data is synced from the admin panel.",
   emptyStates: {
-    owned: "The display shelf is waiting for its first cutie. Add one in the admin panel.",
-    wishlist: "No grails are pinned yet. Save future dream figures in the admin panel."
+    owned: "No figures are in the collection yet. Add the first entry in the admin panel.",
+    wishlist: "No wishlist entries yet. Add future targets in the admin panel."
   }
 } as const;
 
 export const sectionContent = {
   owned: {
     id: "collection",
-    kicker: "in the cabinet",
-    title: "My figure shelf",
-    description: "The figures currently living rent-free in the display case."
+    kicker: "collection",
+    title: "Owned figures",
+    description: "Figures currently cataloged on the shelf."
   },
   wishlist: {
     id: "wishlist",
-    kicker: "dream shelf",
-    title: "Wishlist cuties",
-    description: "Grails, maybes, and future preorders I keep daydreaming about."
+    kicker: "wishlist",
+    title: "Wishlist",
+    description: "Figures being tracked for future purchases."
   }
 } as const;
 

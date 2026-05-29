@@ -12,10 +12,10 @@ const scrollToSection = (target: string) => {
 };
 
 const formatUpdatedAt = (value?: string | null): string => {
-  if (!value) return "ready for new shelf photos";
+  if (!value) return "No sync date available";
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return "recently tidied";
-  return `last shelf tidy · ${new Intl.DateTimeFormat(undefined, {
+  if (Number.isNaN(parsed)) return "Recently synced";
+  return `Last updated ${new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric"
@@ -44,15 +44,16 @@ export const Hero = ({ metrics, updatedAt }: HeroProps) => (
         </button>
       </div>
       <ul className="hero__charms" aria-label="Collection notes">
-        <li>pastel display case</li>
-        <li>owned + wishlist</li>
-        <li>admin synced</li>
+        <li>owned figures</li>
+        <li>wishlist tracking</li>
+        <li>release sorting</li>
       </ul>
     </div>
 
     <aside className="hero-panel" aria-label="Collection snapshot">
       <div className="hero-panel__scene" aria-hidden="true">
-        <span className="hero-panel__moon">☾</span>
+        <span className="hero-panel__star hero-panel__star--large">★</span>
+        <span className="hero-panel__star hero-panel__star--small">✦</span>
         <span className="hero-panel__figure hero-panel__figure--pink" />
         <span className="hero-panel__figure hero-panel__figure--blue" />
         <span className="hero-panel__figure hero-panel__figure--cream" />
