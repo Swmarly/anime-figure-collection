@@ -5,6 +5,7 @@ import { Icon } from "./Icon";
 type FigureCardProps = {
   figure: Figure;
   status: FigureStatus;
+  onImageOpen?: (image: { src: string; alt: string; title: string; meta?: string }) => void;
 };
 
 const statusLabels: Record<FigureStatus, string> = {
@@ -12,7 +13,7 @@ const statusLabels: Record<FigureStatus, string> = {
   wishlist: "Wishlist"
 };
 
-export const FigureCard = ({ figure, status }: FigureCardProps) => {
+export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => {
   const image = getFigureImage(figure);
   const mfcLink = getMfcLink(figure);
   const title = figure.name?.trim() || "Untitled figure";
@@ -27,7 +28,22 @@ export const FigureCard = ({ figure, status }: FigureCardProps) => {
     <article className="figure-card">
       <div className="figure-card__media">
         {image ? (
-          <img src={image} alt={getFigureAlt(figure)} loading="lazy" decoding="async" />
+          <button
+            className="figure-card__image-button"
+            type="button"
+            aria-label={`Open ${title} image fullscreen`}
+            onClick={() =>
+              onImageOpen?.({
+                src: image,
+                alt: getFigureAlt(figure),
+                title,
+                meta: figure.series
+              })
+            }
+          >
+            <img src={image} alt={getFigureAlt(figure)} loading="lazy" decoding="async" />
+            <span>View fullscreen</span>
+          </button>
         ) : (
           <div className="figure-card__placeholder" aria-label="No figure image available">
             <Icon name="archive" />

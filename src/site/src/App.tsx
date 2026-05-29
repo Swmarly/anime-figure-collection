@@ -3,6 +3,7 @@ import { siteConfig } from "./config";
 import { CollectionSection } from "./components/CollectionSection";
 import { Hero } from "./components/Hero";
 import { Icon } from "./components/Icon";
+import { Lightbox, type LightboxImage } from "./components/Lightbox";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useCollection } from "./hooks/useCollection";
 import { buildMetrics } from "./lib/collection";
@@ -14,6 +15,7 @@ export const App = () => {
   const metrics = useMemo(() => buildMetrics(collection), [collection]);
   const [queryBySection, setQueryBySection] = useState({ owned: "", wishlist: "" });
   const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey);
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
 
   return (
     <div className="app-shell">
@@ -62,6 +64,7 @@ export const App = () => {
           isLoading={isLoading}
           onQueryChange={(query) => setQueryBySection((current) => ({ ...current, owned: query }))}
           onSortChange={setSortKey}
+          onImageOpen={setLightboxImage}
         />
 
         <CollectionSection
@@ -72,8 +75,11 @@ export const App = () => {
           isLoading={isLoading}
           onQueryChange={(query) => setQueryBySection((current) => ({ ...current, wishlist: query }))}
           onSortChange={setSortKey}
+          onImageOpen={setLightboxImage}
         />
       </main>
+
+      <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
 
       <footer className="site-footer">
         <p>{siteConfig.footerNote}</p>

@@ -12,6 +12,7 @@ type CollectionSectionProps = {
   isLoading: boolean;
   onQueryChange: (query: string) => void;
   onSortChange: (sortKey: SortKey) => void;
+  onImageOpen?: (image: { src: string; alt: string; title: string; meta?: string }) => void;
 };
 
 const skeletonCards = Array.from({ length: 6 }, (_, index) => `skeleton-${index}`);
@@ -23,7 +24,8 @@ export const CollectionSection = ({
   sortKey,
   isLoading,
   onQueryChange,
-  onSortChange
+  onSortChange,
+  onImageOpen
 }: CollectionSectionProps) => {
   const content = sectionContent[status];
   const visibleFigures = sortFigures(filterFigures(figures, query), sortKey || defaultSortKey);
@@ -58,7 +60,12 @@ export const CollectionSection = ({
       ) : visibleFigures.length ? (
         <div className="figure-grid">
           {visibleFigures.map((figure, index) => (
-            <FigureCard key={getFigureId(figure, status, index)} figure={figure} status={status} />
+            <FigureCard
+              key={getFigureId(figure, status, index)}
+              figure={figure}
+              status={status}
+              onImageOpen={onImageOpen}
+            />
           ))}
         </div>
       ) : (
