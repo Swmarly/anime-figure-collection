@@ -867,6 +867,86 @@ const flattenToStrings = (value) => {
   return [];
 };
 
+const normalizeMfcImageUrl = (value) => {
+  if (!value || typeof value !== "string") return null;
+  const decoded = decodeJsonHtmlEntities(value).trim();
+  if (!decoded || decoded.startsWith("data:")) return null;
+  return decoded.startsWith("//") ? `https:${decoded}` : decoded;
+};
+
+const buildFullSizeMfcImageUrl = (value) => {
+  const normalized = normalizeMfcImageUrl(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.toLowerCase();
+    if (!host.endsWith("myfigurecollection.net")) {
+      return normalized;
+    }
+
+    url.protocol = "https:";
+    url.pathname = url.pathname
+      .replace(
+        /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
+        "/pics/$1/big/$2",
+      )
+      .replace(/\/pics\/(figure|picture)\/([^/]+)$/i, "/pics/$1/big/$2");
+    url.search = "";
+    return url.toString();
+  } catch {
+    return normalized;
+  }
+};
+
+const collectImageCandidates = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectImageCandidates(item));
+  }
+  if (typeof value === "object") {
+    return [
+      ...collectImageCandidates(value.url),
+      ...collectImageCandidates(value.contentUrl),
+      ...collectImageCandidates(value.thumbnailUrl),
+      ...collectImageCandidates(value.image),
+    ];
+  }
+  if (typeof value === "string") {
+    const normalized = normalizeMfcImageUrl(value);
+    return normalized ? [normalized] : [];
+  }
+  return [];
+};
+
+const extractImageUrlsFromHtml = (html) => {
+  const urls = [];
+  const attributeRegex =
+    /(?:src|data-src|data-original|data-large|data-full|href|content)\s*=\s*(["'])([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)\1/gi;
+  let match;
+  while ((match = attributeRegex.exec(html))) {
+    const normalized = normalizeMfcImageUrl(match[2]);
+    if (normalized) urls.push(normalized);
+  }
+  return urls;
+};
+
+const pickBestMfcImage = (...candidateGroups) => {
+  const candidates = candidateGroups.flatMap((group) =>
+    Array.isArray(group) ? group : collectImageCandidates(group),
+  );
+
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const fullSize = buildFullSizeMfcImageUrl(candidate);
+    if (!fullSize || seen.has(fullSize)) continue;
+    seen.add(fullSize);
+    return fullSize;
+  }
+
+  return null;
+};
+
 const parseKeywords = (...values) => {
   const raw = values.flatMap((value) => flattenToStrings(value));
   return Array.from(
@@ -992,7 +1072,7 @@ const parseMfcHtml = (html) => {
   });
 
   const productName = pickFirstString(productEntry?.name);
-  const productImage = pickFirstString(productEntry?.image);
+  const productImageCandidates = collectImageCandidates(productEntry?.image);
   const productDescription = pickFirstString(productEntry?.description);
   const productKeywords = productEntry?.keywords;
   const productSeries =
@@ -1031,7 +1111,13 @@ const parseMfcHtml = (html) => {
 
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
-  const combinedImage = productImage || metaImage || null;
+  const combinedImage = pickBestMfcImage(
+    productImageCandidates,
+    metaImage,
+    extractMeta(html, "name", "twitter:image"),
+    extractMeta(html, "property", "twitter:image"),
+    extractImageUrlsFromHtml(html),
+  );
   const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
   const combinedManufacturer =
     htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
