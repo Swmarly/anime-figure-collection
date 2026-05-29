@@ -735,60 +735,66 @@ const cleanFieldValue = (value) => {
 };
 
 const normalizeLabel = (value) =>
-  value ? value.toLowerCase().replace(/\s+/g, " ").trim() : "";
+  value
+    ? value
+        .toLowerCase()
+        .replace(/&nbsp;/g, " ")
+        .replace(/[:：]+$/g, "")
+        .replace(/[^a-z0-9/ ]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
 
-const extractField = (html, ...labels) => {
-  if (!html) return null;
+const fieldLabelMatches = (rawHeading, labels) => {
+  const heading = cleanFieldValue(decodeHtml(rawHeading));
+  if (!heading) return false;
+  const headingNormalized = normalizeLabel(heading);
+  const headingParts = headingNormalized.split("/").map((part) => part.trim()).filter(Boolean);
+  return labels.some(
+    (label) =>
+      headingNormalized === label ||
+      headingNormalized === `${label} date` ||
+      headingNormalized.startsWith(`${label} `) ||
+      headingParts.some((part) => part === label || part === `${label} date`),
+  );
+};
+
+const extractFieldValues = (html, ...labels) => {
+  if (!html) return [];
   const normalizedLabels = labels
     .filter(Boolean)
     .map((label) => normalizeLabel(label))
     .filter(Boolean);
 
-  if (!normalizedLabels.length) return null;
-
-  const checkMatch = (rawHeading) => {
-    const heading = cleanFieldValue(decodeHtml(rawHeading));
-    if (!heading) return false;
-    const headingNormalized = normalizeLabel(heading);
-    return normalizedLabels.some(
-      (label) =>
-        headingNormalized === label ||
-        headingNormalized.includes(label) ||
-        label.includes(headingNormalized),
-    );
-  };
+  if (!normalizedLabels.length) return [];
 
   const extractValue = (rawValue) => cleanFieldValue(decodeHtml(rawValue));
+  const values = [];
+  const addValue = (rawHeading, rawValue) => {
+    if (!fieldLabelMatches(rawHeading, normalizedLabels)) return;
+    const value = extractValue(rawValue);
+    if (value) values.push(value);
+  };
 
   const patterns = [
     /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
+    /<tr[^>]*>\s*<td[^>]*class=["'][^"']*(?:label|field|key)[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
     /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
-    /<div[^>]*class="[^"]*(?:label|header|title)[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class="[^"]*(?:value|content|data)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+    /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|header|title|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:div|span|li)[^>]*class=["'][^"']*(?:value|content|data|field-value|item-value)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>/gi,
+    /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:a|span|div)[^>]*>([\s\S]*?)<\/(?:a|span|div)>/gi,
   ];
 
   for (const regex of patterns) {
     let match;
     while ((match = regex.exec(html))) {
-      if (!checkMatch(match[1])) continue;
-      const value = extractValue(match[2]);
-      if (value) {
-        return value;
-      }
+      addValue(match[1], match[2]);
     }
   }
 
-  const fallbackRegex = />([^<]+?)<\/?[^>]*>([^<]+?)</gi;
-  let match;
-  while ((match = fallbackRegex.exec(html))) {
-    if (!checkMatch(match[1])) continue;
-    const value = cleanFieldValue(match[2]);
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
+  return Array.from(new Set(values));
 };
+
+const extractField = (html, ...labels) => extractFieldValues(html, ...labels)[0] ?? null;
 
 const decodeJsonHtmlEntities = (value) =>
   value
@@ -1190,79 +1196,126 @@ const parseKeywords = (...values) => {
   );
 };
 
-const normalizeJsonDate = (value) => {
-  if (!value || typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return normalizeReleaseDate(trimmed);
+const flattenReleaseValues = (value) => {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value.flatMap((item) => flattenReleaseValues(item));
+  if (typeof value === "object") {
+    return [
+      ...flattenReleaseValues(value.releaseDate),
+      ...flattenReleaseValues(value.productionDate),
+      ...flattenReleaseValues(value.datePublished),
+      ...flattenReleaseValues(value.availabilityStarts),
+    ];
+  }
+  if (typeof value === "string") {
+    const cleaned = cleanFieldValue(value);
+    return cleaned ? [cleaned] : [];
+  }
+  return [];
 };
+
+const normalizeDateCandidate = (year, month = null) => {
+  const normalizedYear = Number(year);
+  if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 2200) return null;
+
+  if (month === null || month === undefined || month === "") return String(normalizedYear);
+  const normalizedMonth = Number(month);
+  if (!Number.isInteger(normalizedMonth) || normalizedMonth < 1 || normalizedMonth > 12) return String(normalizedYear);
+  return `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}`;
+};
+
+const extractReleaseDateCandidates = (value) => {
+  const monthNames = {
+    jan: "01",
+    feb: "02",
+    mar: "03",
+    apr: "04",
+    may: "05",
+    jun: "06",
+    jul: "07",
+    aug: "08",
+    sep: "09",
+    oct: "10",
+    nov: "11",
+    dec: "12",
+  };
+  const candidates = [];
+
+  for (const rawValue of flattenReleaseValues(value)) {
+    const cleaned = rawValue.replace(/\b(?:released?|release date|original release|re-release|rerelease)\b/gi, " ");
+
+    for (const match of cleaned.matchAll(/\b(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?\b/g)) {
+      const candidate = normalizeDateCandidate(match[1], match[2]);
+      if (candidate) candidates.push(candidate);
+    }
+
+    for (const match of cleaned.matchAll(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g)) {
+      const candidate = normalizeDateCandidate(match[3], Number(match[1]) > 12 ? match[2] : match[1]);
+      if (candidate) candidates.push(candidate);
+    }
+
+    const monthRegex = /\b(jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may\.?|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:tember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)\s+(?:\d{1,2},?\s+)?(\d{4})\b/gi;
+    for (const match of cleaned.matchAll(monthRegex)) {
+      const monthKey = match[1].toLowerCase().replace(/\./g, "").slice(0, 3);
+      const candidate = normalizeDateCandidate(match[2], monthNames[monthKey]);
+      if (candidate) candidates.push(candidate);
+    }
+
+    for (const match of cleaned.matchAll(/\b(\d{4})\b/g)) {
+      const alreadyCapturedWithMonth = candidates.some((candidate) => candidate.startsWith(`${match[1]}-`));
+      if (!alreadyCapturedWithMonth) {
+        const candidate = normalizeDateCandidate(match[1]);
+        if (candidate) candidates.push(candidate);
+      }
+    }
+  }
+
+  return Array.from(new Set(candidates));
+};
+
+const releaseSortValue = (value) => {
+  const match = /^(\d{4})(?:-(\d{2}))?$/.exec(value);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return Number(match[1]) * 100 + Number(match[2] || "01");
+};
+
+const pickOldestReleaseDate = (...values) => {
+  const candidates = values.flatMap((value) => extractReleaseDateCandidates(value));
+  if (!candidates.length) return null;
+  return candidates.sort((a, b) => releaseSortValue(a) - releaseSortValue(b))[0];
+};
+
+const normalizeJsonDate = (value) => pickOldestReleaseDate(value);
 
 const parseDescriptionFields = (description) => {
   if (!description) return {};
   const entries = description
-    .split(/\s*[•\-|\n]\s*/)
+    .split(/\s*(?:[•|;\n]|,(?=\s*[^,]+?\s+(?:as|[-–])\s+))\s*/)
     .map((item) => item.trim())
     .filter(Boolean);
   const mapping = {};
   for (const entry of entries) {
     const parts = entry.split(/:\s*/);
-    if (parts.length < 2) continue;
-    const key = normalizeLabel(parts[0]);
-    const value = cleanFieldValue(parts.slice(1).join(": "));
+    const roleMatch = !entry.includes(":") ? /^(.+?)\s+(?:as|[-–])\s+(.+)$/i.exec(entry) : null;
+    const key = roleMatch ? normalizeLabel(roleMatch[2]) : normalizeLabel(parts[0]);
+    const value = roleMatch ? cleanFieldValue(roleMatch[1]) : cleanFieldValue(parts.slice(1).join(": "));
     if (!key || !value) continue;
     mapping[key] = value;
   }
-  const series = mapping["origin"] || mapping["series"] || mapping["source"] || null;
-  const manufacturer = mapping["manufacturer"] || mapping["company"] || mapping["producer"] || null;
+  const series = mapping["origin"] || mapping["series"] || mapping["source"] || mapping["franchise"] || null;
+  const manufacturer = mapping["manufacturer"] || mapping["company"] || mapping["producer"] || mapping["brand"] || null;
   const scale = mapping["scale"] || mapping["classification"] || mapping["ratio"] || null;
-  const releaseDate = normalizeReleaseDate(
-    mapping["release"] || mapping["release date"] || mapping["released"] || null,
+  const releaseDate = pickOldestReleaseDate(
+    mapping["release"],
+    mapping["release date"],
+    mapping["released"],
+    mapping["original release"],
   );
   return { series, manufacturer, scale, releaseDate };
 };
 
 function normalizeReleaseDate(value) {
-  const cleaned = cleanFieldValue(value);
-  if (!cleaned) return null;
-
-  const numericMatch = cleaned.match(/(\d{4})[-/](\d{1,2})/);
-  if (numericMatch) {
-    const [, year, month] = numericMatch;
-    return `${year}-${month.padStart(2, "0")}`;
-  }
-
-  const monthMatch = cleaned.match(
-    /(jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may\.?|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:tember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)\s+(\d{4})/i,
-  );
-  if (monthMatch) {
-    const monthNames = {
-      jan: "01",
-      feb: "02",
-      mar: "03",
-      apr: "04",
-      may: "05",
-      jun: "06",
-      jul: "07",
-      aug: "08",
-      sep: "09",
-      oct: "10",
-      nov: "11",
-      dec: "12",
-    };
-    const monthKey = monthMatch[1].toLowerCase().replace(/\./g, "").slice(0, 3);
-    const year = monthMatch[2];
-    const monthNumber = monthNames[monthKey];
-    if (monthNumber) {
-      return `${year}-${monthNumber}`;
-    }
-  }
-
-  const yearMatch = cleaned.match(/\b(\d{4})\b/);
-  if (yearMatch) {
-    return `${yearMatch[1]}`;
-  }
-
-  return cleaned;
+  return pickOldestReleaseDate(value) || cleanFieldValue(value);
 }
 
 const summarizeText = (value) => {
@@ -1316,10 +1369,11 @@ const parseMfcHtml = async (html) => {
     pickFirstString(productEntry?.manufacturer) ||
     null;
   const productScale = pickFirstString(productEntry?.scale) || pickFirstString(productEntry?.size) || null;
-  const productRelease =
-    normalizeJsonDate(productEntry?.releaseDate) ||
-    normalizeJsonDate(productEntry?.productionDate) ||
-    normalizeJsonDate(productEntry?.offers?.releaseDate);
+  const productRelease = pickOldestReleaseDate(
+    productEntry?.releaseDate,
+    productEntry?.productionDate,
+    productEntry?.offers,
+  );
 
   const htmlSeries =
     extractField(html, "Origin", "Source", "Series", "Origin of Character") ||
@@ -1327,14 +1381,15 @@ const parseMfcHtml = async (html) => {
     null;
   const htmlManufacturer = extractField(html, "Manufacturer", "Company", "Producer");
   const htmlScale = extractField(html, "Scale", "Classification", "Ratio", "Size");
-  const htmlRelease = normalizeReleaseDate(
-    extractField(
+  const htmlRelease = pickOldestReleaseDate(
+    extractFieldValues(
       html,
       "Release",
       "Released",
       "Release Date",
       "Release date",
       "Original release",
+      "Re-release",
     ),
   );
 

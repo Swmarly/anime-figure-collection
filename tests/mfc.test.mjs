@@ -30,6 +30,12 @@ const buildSampleHtml = ({
 </script>
 </head><body>
 <img src="https://static.myfigurecollection.net/upload/items/2/wrong-related-figure.jpg" />
+<table class="item-details">
+  <tr><th>Series / Origin</th><td><a href="/entry/1">Re:Zero Starting Life</a></td></tr>
+  <tr><th>Manufacturer</th><td><a href="/entry/2">Good Smile Company</a></td></tr>
+  <tr><th>Scale</th><td>1/7</td></tr>
+  <tr><th>Release date</th><td>2024-08; 2023-12; May 2025</td></tr>
+</table>
 <div class="split-left righter">
   <div class="item-picture" style="width:168px">
     <div class="tbx-pswp">
@@ -92,10 +98,10 @@ try {
   ]);
   assert.equal(lowResolutionPayload.description, 'Rem figure with blue hair.');
   assert.equal(lowResolutionPayload.caption, 'Rem figure with blue hair.');
-  assert.equal(lowResolutionPayload.series, 'Re:Zero kara Hajimeru Isekai Seikatsu');
-  assert.equal(lowResolutionPayload.manufacturer, 'SEGA');
-  assert.equal(lowResolutionPayload.scale, 'Prize Figure');
-  assert.equal(lowResolutionPayload.releaseDate, '2024-05');
+  assert.equal(lowResolutionPayload.series, 'Re:Zero Starting Life');
+  assert.equal(lowResolutionPayload.manufacturer, 'Good Smile Company');
+  assert.equal(lowResolutionPayload.scale, '1/7');
+  assert.equal(lowResolutionPayload.releaseDate, '2023-12');
   assert.deepEqual(lowResolutionPayload.tags, [
     'rem',
     'demon',
