@@ -1,7 +1,8 @@
 :root {
   color-scheme: light;
-  font-family:
-    "Nunito", "Comic Sans MS", ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Inter", "Nunito Sans", "Avenir Next", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Inter", "Nunito Sans", "Avenir Next", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-body);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --bg: #fff7fb;
@@ -312,7 +313,7 @@ img { max-width: 100%; }
   margin: 0;
   max-width: 10ch;
   color: var(--text);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(3rem, 9vw, 7rem);
   font-weight: 800;
   line-height: 0.95;
@@ -536,7 +537,7 @@ img { max-width: 100%; }
   display: block;
   margin-block: 0.12rem;
   color: var(--accent);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3.2rem);
   line-height: 1;
 }
@@ -593,7 +594,7 @@ img { max-width: 100%; }
 
 .section-heading h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4.3rem);
   letter-spacing: -0.045em;
 }
@@ -740,7 +741,7 @@ img { max-width: 100%; }
 
 .figure-card h3 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.32rem;
   line-height: 1.12;
   letter-spacing: -0.035em;
