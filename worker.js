@@ -844,6 +844,57 @@ const extractFieldValues = (html, ...labels) => {
 
 const extractField = (html, ...labels) => extractFieldValues(html, ...labels)[0] ?? null;
 
+const normalizeScaleValue = (value) => {
+  const cleaned = cleanFieldValue(value);
+  if (!cleaned) return null;
+
+  const scaleMatch = cleaned.replace(/\s+/g, "").match(/\b1\/(?:\d+(?:\.\d+)?)\b/);
+  return scaleMatch ? scaleMatch[0] : cleaned;
+};
+
+const extractMfcScaleValues = (html) => {
+  if (!html) return [];
+  const values = [];
+  const anchorRegex = /<a\b(?=[^>]*(?:class=["'][^"']*item-scale[^"']*["']|title=["']Scale["']))[^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+
+  while ((match = anchorRegex.exec(html))) {
+    const value = normalizeScaleValue(decodeHtml(match[1]));
+    if (value) values.push(value);
+  }
+
+  const scaleParamRegex = /[?&amp;]scale=(\d+(?:\.\d+)?)/gi;
+  while ((match = scaleParamRegex.exec(html))) {
+    values.push(`1/${match[1]}`);
+  }
+
+  return Array.from(new Set(values));
+};
+
+const extractMfcCalendarReleaseValues = (html) => {
+  if (!html) return [];
+  const values = [];
+  const anchorRegex = /<a\b([^>]*(?:class=["'][^"']*\btime\b[^"']*["'][^>]*|tab=calendar[^>]*))>([\s\S]*?)<\/a>/gi;
+  let match;
+
+  while ((match = anchorRegex.exec(html))) {
+    const tag = decodeJsonHtmlEntities(match[1]);
+    const yearMatch = /[?&]year=(\d{4})\b/i.exec(tag);
+    const monthMatch = /[?&]month=(\d{1,2})\b/i.exec(tag);
+    if (yearMatch) {
+      const candidate = normalizeDateCandidate(yearMatch[1], monthMatch?.[1] ?? null);
+      if (candidate) values.push(candidate);
+      continue;
+    }
+
+    const text = decodeHtml(match[2]);
+    values.push(...extractReleaseDateCandidates(text));
+  }
+
+  return Array.from(new Set(values));
+};
+
+
 const decodeJsonHtmlEntities = (value) =>
   value
     .replace(/&quot;/g, '"')
@@ -1435,8 +1486,10 @@ const parseMfcHtml = async (html) => {
     extractField(html, "Character") ||
     null;
   const htmlManufacturer = extractField(html, "Manufacturer", "Company", "Producer");
-  const htmlScale = extractField(html, "Scale", "Classification", "Ratio", "Size");
+  const htmlScale =
+    extractMfcScaleValues(html)[0] || extractField(html, "Scale", "Classification", "Ratio", "Size");
   const htmlRelease = pickOldestReleaseDate(
+    extractMfcCalendarReleaseValues(html),
     extractFieldValues(
       html,
       "Release",

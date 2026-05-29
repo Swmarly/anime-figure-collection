@@ -137,6 +137,20 @@ try {
   assert.equal(inlineFieldPayload.scale, '1/8');
   assert.equal(inlineFieldPayload.releaseDate, '2022-11');
 
+
+  const mfcDataValuePayload = await fetchLookupPayload(
+    buildSampleHtml({
+      firstWidth: 900,
+      firstHeight: 1350,
+      detailsMarkup: `<div class="data-value"><a href="/?_tb=item&amp;scale=7" class="item-scale" title="Scale"><small>1/</small>7</a>&nbsp;&nbsp;<small>H=</small><strong>240</strong><small>mm (9.36in, 1:1=1.68m)</small></div>
+<div class="data-value"><a href="/?_tb=item&amp;tab=calendar&amp;year=2026&amp;month=02" class="time">02/2026</a> <small class="light">as <em>Limited (Japan)</em></small></div>
+<div class="data-value"><a href="/?_tb=item&amp;tab=calendar&amp;year=2024&amp;month=12" class="time">12/2024</a> <small class="light">as <em>Standard</em></small></div>`,
+    }),
+  );
+
+  assert.equal(mfcDataValuePayload.scale, '1/7');
+  assert.equal(mfcDataValuePayload.releaseDate, '2024-12');
+
   const missingFullSizePayload = await fetchLookupPayload(
     buildSampleHtml({
       firstWidth: 900,
