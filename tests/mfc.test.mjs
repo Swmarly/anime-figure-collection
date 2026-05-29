@@ -6,6 +6,12 @@ const buildSampleHtml = ({
   firstWidth,
   firstHeight,
   firstGalleryPath = 'items%5C%2F2%5C%2F1685257-main.jpg',
+  detailsMarkup = `<table class="item-details">
+  <tr><th>Series / Origin</th><td><a href="/entry/1">Re:Zero Starting Life</a></td></tr>
+  <tr><th>Manufacturer</th><td><a href="/entry/2">Good Smile Company</a></td></tr>
+  <tr><th>Scale</th><td>1/7</td></tr>
+  <tr><th>Release date</th><td>2024-08; 2023-12; May 2025</td></tr>
+</table>`,
 }) => `<!DOCTYPE html><html><head>
 <meta property="og:title" content="Rem" />
 <meta property="og:image" content="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=old" />
@@ -30,12 +36,7 @@ const buildSampleHtml = ({
 </script>
 </head><body>
 <img src="https://static.myfigurecollection.net/upload/items/2/wrong-related-figure.jpg" />
-<table class="item-details">
-  <tr><th>Series / Origin</th><td><a href="/entry/1">Re:Zero Starting Life</a></td></tr>
-  <tr><th>Manufacturer</th><td><a href="/entry/2">Good Smile Company</a></td></tr>
-  <tr><th>Scale</th><td>1/7</td></tr>
-  <tr><th>Release date</th><td>2024-08; 2023-12; May 2025</td></tr>
-</table>
+${detailsMarkup}
 <div class="split-left righter">
   <div class="item-picture" style="width:168px">
     <div class="tbx-pswp">
@@ -122,6 +123,19 @@ try {
     'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
     'https://static.myfigurecollection.net/upload/pictures/2025/07/18/1685257-second.jpeg',
   ]);
+
+  const inlineFieldPayload = await fetchLookupPayload(
+    buildSampleHtml({
+      firstWidth: 900,
+      firstHeight: 1350,
+      detailsMarkup: `<section class="details-text">Series / Origin: Re:Zero Inline Manufacturer: Max Factory Scale: 1/8 Release Date: 2026-03; 2022-11</section>`,
+    }),
+  );
+
+  assert.equal(inlineFieldPayload.series, 'Re:Zero Inline');
+  assert.equal(inlineFieldPayload.manufacturer, 'Max Factory');
+  assert.equal(inlineFieldPayload.scale, '1/8');
+  assert.equal(inlineFieldPayload.releaseDate, '2022-11');
 
   const missingFullSizePayload = await fetchLookupPayload(
     buildSampleHtml({

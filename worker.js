@@ -759,6 +759,50 @@ const fieldLabelMatches = (rawHeading, labels) => {
   );
 };
 
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const extractTextFieldValues = (html, labels) => {
+  const text = decodeHtml(html);
+  if (!text) return [];
+
+  const knownLabels = [
+    "origin",
+    "source",
+    "series",
+    "origin of character",
+    "character",
+    "manufacturer",
+    "company",
+    "producer",
+    "scale",
+    "classification",
+    "ratio",
+    "size",
+    "release",
+    "released",
+    "release date",
+    "original release",
+    "re-release",
+  ];
+  const boundary = knownLabels.map(escapeRegex).join("|");
+  const values = [];
+
+  for (const label of labels) {
+    const pattern = new RegExp(
+      `(?:^|\\s)${escapeRegex(label)}(?:\\s*/\\s*(?:${boundary}))*\\s*[:：]\\s*([\\s\\S]*?)(?=\\s+(?:${boundary})(?:\\s*/\\s*(?:${boundary}))*\\s*[:：]|$)`,
+      "gi",
+    );
+    let match;
+    while ((match = pattern.exec(text))) {
+      const value = cleanFieldValue(match[1]);
+      if (value) values.push(value);
+    }
+  }
+
+  return values;
+};
+
 const extractFieldValues = (html, ...labels) => {
   if (!html) return [];
   const normalizedLabels = labels
@@ -782,6 +826,8 @@ const extractFieldValues = (html, ...labels) => {
     /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
     /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|header|title|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:div|span|li)[^>]*class=["'][^"']*(?:value|content|data|field-value|item-value)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>/gi,
     /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:a|span|div)[^>]*>([\s\S]*?)<\/(?:a|span|div)>/gi,
+    /<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>\s*<(?:a|span|div|time)[^>]*>([\s\S]*?)<\/(?:a|span|div|time)>/gi,
+    /<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>\s*([^<]{1,240})/gi,
   ];
 
   for (const regex of patterns) {
@@ -790,6 +836,8 @@ const extractFieldValues = (html, ...labels) => {
       addValue(match[1], match[2]);
     }
   }
+
+  values.push(...extractTextFieldValues(html, normalizedLabels));
 
   return Array.from(new Set(values));
 };
@@ -1289,8 +1337,15 @@ const normalizeJsonDate = (value) => pickOldestReleaseDate(value);
 
 const parseDescriptionFields = (description) => {
   if (!description) return {};
+  const knownDescriptionKeys =
+    "origin|series|source|franchise|manufacturer|company|producer|brand|scale|classification|ratio|release|released|release date|original release";
   const entries = description
-    .split(/\s*(?:[•|;\n]|,(?=\s*[^,]+?\s+(?:as|[-–])\s+))\s*/)
+    .split(
+      new RegExp(
+        String.raw`\s*(?:[•|;\n]|[-–](?=\s*(?:${knownDescriptionKeys})\s*:)|,(?=\s*(?:(?:${knownDescriptionKeys})\s*:|[^,]+?\s+(?:as|[-–])\s+)))\s*`,
+        "i",
+      ),
+    )
     .map((item) => item.trim())
     .filter(Boolean);
   const mapping = {};
