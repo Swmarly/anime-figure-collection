@@ -4,6 +4,7 @@ const lookupInput = document.getElementById("mfc-item-id");
 const lookupFeedback = document.getElementById("mfc-feedback");
 const clearLookupButton = document.getElementById("clear-mfc-data");
 const figureForm = document.getElementById("figure-form");
+const refreshMfcImageButton = document.getElementById("refresh-mfc-image");
 const resetFormButton = document.getElementById("reset-form");
 const copyEntryButton = document.getElementById("copy-entry");
 const downloadButton = document.getElementById("download-json");
@@ -992,6 +993,164 @@ const handleManualSave = async () => {
   }
 };
 
+const fetchMfcDetails = async (itemId) => {
+  const response = await authorizedFetch(`/api/mfc?item=${encodeURIComponent(itemId)}`, {
+    headers: { Accept: "application/json" },
+  });
+
+  const contentType = response.headers.get("Content-Type") || "";
+  const bodyText = await response.text();
+
+  if (!response.ok) {
+    let message = response.headers.get("X-Error") || `Lookup failed (status ${response.status})`;
+
+    if (!message && contentType.includes("application/json")) {
+      try {
+        const parsedError = JSON.parse(bodyText);
+        if (parsedError && typeof parsedError.error === "string") {
+          message = parsedError.error;
+        }
+      } catch (parseError) {
+        console.warn("Unable to parse error response as JSON", parseError);
+      }
+    }
+
+    if (!message && bodyText) {
+      const trimmed = bodyText.trim();
+      if (trimmed) {
+        message = trimmed.length > 160 ? `${trimmed.slice(0, 157)}…` : trimmed;
+      }
+    }
+
+    throw new Error(message || "Lookup failed. Please try again.");
+  }
+
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      "The server returned an unexpected response. Check that the worker is running and you're signed in, then try again.",
+    );
+  }
+
+  try {
+    return JSON.parse(bodyText);
+  } catch (parseError) {
+    console.warn("Unable to parse lookup response as JSON", parseError);
+    throw new Error("Received malformed data from the server. Please try again.");
+  }
+};
+
+const getCurrentMfcItemId = () =>
+  parseMfcItemId(
+    fields.mfcId.value ||
+      lookupInput.value ||
+      (state.editing?.mfcId !== undefined && state.editing?.mfcId !== null
+        ? String(state.editing.mfcId)
+        : ""),
+  );
+
+const formatSavedTimestamp = (value) => {
+  if (!value) return "";
+  const savedDate = new Date(value);
+  return Number.isNaN(savedDate.getTime()) ? value : savedDate.toLocaleString();
+};
+
+const syncEditedImageUrl = async (itemId, imageUrl) => {
+  if (!state.loaded || !state.editing) {
+    return null;
+  }
+
+  const entries = state.collection[state.editing.list];
+  if (!Array.isArray(entries)) {
+    return null;
+  }
+
+  const index = entries.findIndex((entry) => identityMatches(entry, state.editing));
+  if (index < 0) {
+    return null;
+  }
+
+  const numericMfcId = Number(itemId);
+  entries.splice(
+    index,
+    1,
+    compactEntry({
+      ...entries[index],
+      mfcId: Number.isFinite(numericMfcId) ? numericMfcId : entries[index].mfcId,
+      image: imageUrl,
+    }),
+  );
+
+  state.editing = {
+    ...state.editing,
+    mfcId: Number.isFinite(numericMfcId) ? numericMfcId : state.editing.mfcId,
+  };
+
+  renderManager();
+  return persistCollection();
+};
+
+const handleRefreshMfcImage = async () => {
+  const itemId = getCurrentMfcItemId();
+  if (!itemId) {
+    lookupFeedback.textContent =
+      "Enter an MFC item number first, or edit an existing entry that has one.";
+    return;
+  }
+
+  const originalLabel = refreshMfcImageButton.textContent;
+  refreshMfcImageButton.disabled = true;
+  refreshMfcImageButton.textContent = "Refreshing…";
+  lookupFeedback.textContent = "Fetching the latest MyFigureCollection image…";
+
+  try {
+    const data = await fetchMfcDetails(itemId);
+    const latestImage = typeof data.image === "string" ? data.image.trim() : "";
+
+    if (!latestImage) {
+      lookupFeedback.textContent = "MyFigureCollection did not return an image URL for this item.";
+      return;
+    }
+
+    const previousImage = fields.image.value.trim();
+    const changed = previousImage !== latestImage;
+
+    lookupInput.value = itemId;
+    fields.mfcId.value = itemId;
+    fields.image.value = latestImage;
+    renderPreview();
+
+    if (!changed) {
+      lookupFeedback.textContent =
+        "Image URL already matches the latest MyFigureCollection image.";
+      return;
+    }
+
+    const syncResult = await syncEditedImageUrl(itemId, latestImage);
+    if (syncResult?.updatedAt) {
+      lookupFeedback.textContent = `Image URL refreshed from MyFigureCollection and synced at ${formatSavedTimestamp(
+        syncResult.updatedAt,
+      )}.`;
+    } else if (syncResult) {
+      lookupFeedback.textContent =
+        "Image URL refreshed from MyFigureCollection and synced to Cloudflare.";
+    } else {
+      lookupFeedback.textContent =
+        "Image URL refreshed from MyFigureCollection. Save the entry to publish it.";
+    }
+  } catch (error) {
+    if (error?.message === "Unauthorized") {
+      lookupFeedback.textContent = SESSION_EXPIRED_MESSAGE;
+      return;
+    }
+
+    lookupFeedback.textContent =
+      error.message || "Unable to refresh the image from MyFigureCollection.";
+  } finally {
+    refreshMfcImageButton.disabled = false;
+    refreshMfcImageButton.textContent = originalLabel;
+  }
+};
+
 const handleLookup = async (event) => {
   event.preventDefault();
   const rawItemId = lookupInput.value;
@@ -1002,58 +1161,11 @@ const handleLookup = async (event) => {
   }
 
   lookupInput.value = itemId;
-
   lookupFeedback.textContent = "Fetching item details…";
 
   try {
-    const response = await authorizedFetch(`/api/mfc?item=${encodeURIComponent(itemId)}`, {
-      headers: { Accept: "application/json" },
-    });
+    const data = await fetchMfcDetails(itemId);
 
-    const contentType = response.headers.get("Content-Type") || "";
-    const bodyText = await response.text();
-
-    if (!response.ok) {
-      let message =
-        response.headers.get("X-Error") || `Lookup failed (status ${response.status})`;
-
-      if (!message && contentType.includes("application/json")) {
-        try {
-          const parsedError = JSON.parse(bodyText);
-          if (parsedError && typeof parsedError.error === "string") {
-            message = parsedError.error;
-          }
-        } catch (parseError) {
-          console.warn("Unable to parse error response as JSON", parseError);
-        }
-      }
-
-      if (!message && bodyText) {
-        const trimmed = bodyText.trim();
-        if (trimmed) {
-          message =
-            trimmed.length > 160
-              ? `${trimmed.slice(0, 157)}…`
-              : trimmed;
-        }
-      }
-
-      throw new Error(message || "Lookup failed. Please try again.");
-    }
-
-    if (!contentType.includes("application/json")) {
-      throw new Error(
-        "The server returned an unexpected response. Check that the worker is running and you're signed in, then try again."
-      );
-    }
-
-    let data;
-    try {
-      data = JSON.parse(bodyText);
-    } catch (parseError) {
-      console.warn("Unable to parse lookup response as JSON", parseError);
-      throw new Error("Received malformed data from the server. Please try again.");
-    }
     fields.mfcId.value = itemId;
     fields.name.value = data.name ?? fields.name.value;
     fields.series.value = data.series ?? fields.series.value;
@@ -1255,6 +1367,7 @@ if (fields.slug) {
 }
 
 lookupForm.addEventListener("submit", handleLookup);
+refreshMfcImageButton.addEventListener("click", handleRefreshMfcImage);
 clearLookupButton.addEventListener("click", () => {
   lookupInput.value = "";
   lookupFeedback.textContent = "Lookup fields cleared.";
