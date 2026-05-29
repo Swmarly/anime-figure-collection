@@ -31,7 +31,7 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
           <button
             className="figure-card__image-button"
             type="button"
-            aria-label={`Open ${title} image fullscreen`}
+            aria-label={`Open larger image for ${title}`}
             onClick={() =>
               onImageOpen?.({
                 src: image,
@@ -42,7 +42,6 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
             }
           >
             <img src={image} alt={getFigureAlt(figure)} loading="lazy" decoding="async" />
-            <span>View fullscreen</span>
           </button>
         ) : (
           <div className="figure-card__placeholder" aria-label="No figure image available">

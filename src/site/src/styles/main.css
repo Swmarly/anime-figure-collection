@@ -758,33 +758,10 @@ img { max-width: 100%; }
   transition: transform 280ms ease, filter 180ms ease;
 }
 
-.figure-card__image-button span {
-  position: absolute;
-  left: 50%;
-  bottom: 0.85rem;
-  transform: translate(-50%, 0.35rem);
-  border: 1px solid rgba(255, 255, 255, 0.68);
-  border-radius: 999px;
-  background: rgba(17, 25, 44, 0.78);
-  color: #fff8df;
-  padding: 0.45rem 0.7rem;
-  font-size: 0.78rem;
-  font-weight: 850;
-  opacity: 0;
-  transition: 180ms ease;
-  white-space: nowrap;
-}
-
 .figure-card__image-button:hover img,
 .figure-card__image-button:focus-visible img {
   filter: saturate(1.05) brightness(0.92);
   transform: scale(1.03);
-}
-
-.figure-card__image-button:hover span,
-.figure-card__image-button:focus-visible span {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .figure-card:hover .figure-card__media img { transform: scale(1.03); }

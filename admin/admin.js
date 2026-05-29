@@ -1014,8 +1014,17 @@ const handleManualSave = async () => {
 };
 
 const fetchMfcDetails = async (itemId) => {
-  const response = await authorizedFetch(`/api/mfc?item=${encodeURIComponent(itemId)}`, {
-    headers: { Accept: "application/json" },
+  const params = new URLSearchParams({
+    item: itemId,
+    refresh: String(Date.now()),
+  });
+  const response = await authorizedFetch(`/api/mfc?${params.toString()}`, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Cache-Control": "no-store",
+      Pragma: "no-cache",
+    },
   });
 
   const contentType = response.headers.get("Content-Type") || "";
@@ -1059,14 +1068,16 @@ const fetchMfcDetails = async (itemId) => {
   }
 };
 
-const getCurrentMfcItemId = () =>
+const getEntryMfcItemId = (entry) =>
   parseMfcItemId(
-    fields.mfcId.value ||
-      lookupInput.value ||
-      (state.editing?.mfcId !== undefined && state.editing?.mfcId !== null
-        ? String(state.editing.mfcId)
-        : ""),
+    entry?.mfcId !== undefined && entry?.mfcId !== null && entry?.mfcId !== ""
+      ? String(entry.mfcId)
+      : entry?.links?.mfc || "",
   );
+
+const getCurrentMfcItemId = () =>
+  parseMfcItemId(fields.mfcId.value || lookupInput.value || "") ||
+  (state.editing ? getEntryMfcItemId(state.editing) : null);
 
 const formatSavedTimestamp = (value) => {
   if (!value) return "";
@@ -1117,17 +1128,30 @@ const getMfcImageRefreshTargets = () =>
     }
 
     return entries
-      .map((entry, index) => ({ list, index, entry }))
-      .filter(({ entry }) => entry?.mfcId !== undefined && entry?.mfcId !== null && entry.mfcId !== "");
+      .map((entry, index) => ({
+        list,
+        index,
+        entry,
+        itemId: getEntryMfcItemId(entry),
+      }))
+      .filter(({ itemId }) => Boolean(itemId));
   });
 
-const updateEntryImageFromMfc = ({ list, index, entry }, imageUrl) => {
+const updateEntryImageFromMfc = ({ list, index, entry, itemId }, imageUrl) => {
   const entries = state.collection[list];
   if (!Array.isArray(entries) || !entries[index]) {
     return null;
   }
 
-  const updatedEntry = compactEntry({ ...entries[index], image: imageUrl });
+  const updatedEntry = compactEntry({
+    ...entries[index],
+    mfcId: Number(itemId),
+    links: {
+      ...(entry.links && typeof entry.links === "object" ? entry.links : {}),
+      mfc: `https://myfigurecollection.net/item/${itemId}`,
+    },
+    image: imageUrl,
+  });
   entries.splice(index, 1, updatedEntry);
 
   if (state.editing && state.editing.list === list && identityMatches(updatedEntry, state.editing)) {
@@ -1172,11 +1196,16 @@ const handleRefreshAllMfcImages = async () => {
       lookupFeedback.textContent = `Refreshing image ${targetIndex + 1}/${targets.length}: ${label}…`;
 
       try {
-        const data = await fetchMfcDetails(String(target.entry.mfcId));
+        const data = await fetchMfcDetails(target.itemId);
         const latestImage = typeof data.image === "string" ? data.image.trim() : "";
         const currentImage = typeof target.entry.image === "string" ? target.entry.image.trim() : "";
 
-        if (latestImage && latestImage !== currentImage) {
+        if (!latestImage) {
+          failures.push(`${label}: no image URL returned`);
+          continue;
+        }
+
+        if (latestImage !== currentImage) {
           const updatedEntry = updateEntryImageFromMfc(target, latestImage);
           if (updatedEntry) {
             updatedCount += 1;
@@ -1194,6 +1223,12 @@ const handleRefreshAllMfcImages = async () => {
         }
         failures.push(`${label}: ${error.message || "Unable to refresh image"}`);
       }
+
+      if (targetIndex < targets.length - 1) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 300);
+        });
+      }
     }
 
     state.additions = state.additions.slice(0, 20);
@@ -1201,19 +1236,21 @@ const handleRefreshAllMfcImages = async () => {
     renderManager();
     renderPreview();
 
+    const failureSummary = failures.length
+      ? ` ${failures.length} failed: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? "…" : ""}`
+      : "";
+
     if (updatedCount > 0) {
       lookupFeedback.textContent = `Updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}. Saving to Cloudflare…`;
       const result = await persistCollection();
       const savedSuffix = result?.updatedAt
         ? ` Synced at ${formatSavedTimestamp(result.updatedAt)}.`
         : " Synced to Cloudflare.";
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${
-        failures.length ? ` ${failures.length} failed.` : ""
-      }`;
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${failureSummary}`;
+    } else if (failures.length === targets.length) {
+      lookupFeedback.textContent = `Tried ${targets.length} MFC item${targets.length === 1 ? "" : "s"}, but every image refresh failed.${failureSummary}`;
     } else {
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${
-        failures.length ? ` ${failures.length} failed.` : ""
-      }`;
+      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${failureSummary}`;
     }
 
     if (failures.length) {
