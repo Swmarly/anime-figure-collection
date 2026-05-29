@@ -151,6 +151,32 @@ try {
   assert.equal(mfcDataValuePayload.scale, '1/7');
   assert.equal(mfcDataValuePayload.releaseDate, '2024-12');
 
+
+  const metadataImagePayload = await fetchLookupPayload(`<!DOCTYPE html><html><head>
+<meta property="og:title" content="Metadata figure" />
+<meta property="og:image" content="https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=meta" />
+<meta property="og:description" content="Metadata-only image fallback." />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Metadata figure",
+  "image": ["https://static.myfigurecollection.net/upload/items/1/1685257-main.jpg?rev=jsonld"],
+  "brand": { "name": "Fallback Maker" },
+  "scale": "1/7",
+  "offers": { "releaseDate": "2024-05-01" }
+}
+</script>
+</head><body><p>No split-left gallery on this response.</p></body></html>`);
+
+  assert.equal(
+    metadataImagePayload.image,
+    'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
+  );
+  assert.deepEqual(metadataImagePayload.images, [
+    'https://static.myfigurecollection.net/upload/items/2/1685257-main.jpg',
+  ]);
+
   const missingFullSizePayload = await fetchLookupPayload(
     buildSampleHtml({
       firstWidth: 900,

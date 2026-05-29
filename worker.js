@@ -1506,7 +1506,9 @@ const parseMfcHtml = async (html) => {
   const combinedDescription = productDescription || metaDescription || null;
   const combinedName = productName || metaName || null;
   const scopedImageCandidates = extractScopedMfcImageCandidates(html);
-  const combinedImages = scopedImageCandidates.length ? await pickMfcImages(scopedImageCandidates) : [];
+  const fallbackImageCandidates = [metaImage, productImageCandidates];
+  const imageCandidates = scopedImageCandidates.length ? scopedImageCandidates : fallbackImageCandidates;
+  const combinedImages = imageCandidates.length ? await pickMfcImages(imageCandidates) : [];
   const combinedImage = combinedImages[0] ?? null;
   const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
   const combinedManufacturer =
