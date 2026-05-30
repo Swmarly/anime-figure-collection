@@ -1,0 +1,31 @@
+{
+  "name": "anime-figure-collection",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && node scripts/publish-site.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "lint": "eslint src vite.config.ts --max-warnings=0",
+    "test": "node tests/auth.test.mjs && node tests/collection.test.mjs && node tests/mfc.test.mjs"
+  },
+  "dependencies": {
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "^8.60.0",
+    "vite": "latest"
+  }
+}
