@@ -56,10 +56,16 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
       </div>
 
       <div className="figure-card__body">
-        <div>
+        <div className="figure-card__summary">
           <p className="figure-card__eyebrow">{figure.manufacturer || "Unknown maker"}</p>
           <h3>{title}</h3>
-          {figure.description ? <p className="figure-card__description">{figure.description}</p> : null}
+          {figure.description ? (
+            <p className="figure-card__description">{figure.description}</p>
+          ) : (
+            <p className="figure-card__description figure-card__description--empty" aria-hidden="true">
+              {"\u00a0"}
+            </p>
+          )}
         </div>
 
         <dl className="figure-card__details">
