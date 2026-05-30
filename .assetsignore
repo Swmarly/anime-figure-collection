@@ -1,1 +1,32 @@
+# Cloudflare static assets are served from the repository root via
+# wrangler.toml `[assets] directory = "."`. Keep source, dependencies,
+# tooling, tests, and Worker entry files out of the static asset upload.
+
+# Dependency and package manager output
+node_modules/
+dist/
+.npm/
+.cache/
+
+# Source and build tooling
+src/
+scripts/
+tests/
+package.json
+package-lock.json
+tsconfig.json
+vite.config.ts
+eslint.config.js
+
+# Repository metadata and local-only files
+.git/
+.gitignore
+.assetsignore
+.env
+.env.*
+!.env.example
+
+# Worker entry/runtime source is bundled by Wrangler, not uploaded as a static asset
 _worker.js
+worker.js
+wrangler.toml
