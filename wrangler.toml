@@ -5,9 +5,33 @@ compatibility_date = "2024-06-01"
 [assets]
 directory = "."
 
-# Without this binding the Worker falls back to an in-memory store. (Not persistent after redeployment).
-# Has to be bound in both the worker and pages project to function properly.
+[secrets]
+required = [
+  "ADMIN_USERNAME",
+  "ADMIN_PASSWORD"
+]
+
+# Production KV binding
 [[kv_namespaces]]
+binding = "COLLECTION"
+id = "9eb8afadcaa343bcab49e375508533d7"
+preview_id = "9eb8afadcaa343bcab49e375508533d7"
+
+# Preview / non-production branch Worker
+[env.preview]
+name = "anime-figure-collection-worker-preview"
+
+[env.preview.assets]
+directory = "."
+
+[env.preview.secrets]
+required = [
+  "ADMIN_USERNAME",
+  "ADMIN_PASSWORD"
+]
+
+# Preview KV binding
+[[env.preview.kv_namespaces]]
 binding = "COLLECTION"
 id = "9eb8afadcaa343bcab49e375508533d7"
 preview_id = "9eb8afadcaa343bcab49e375508533d7"
