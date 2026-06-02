@@ -246,7 +246,8 @@ const storeCollection = async (env, payload) => {
     try {
       await binding.put(COLLECTION_KV_KEY, JSON.stringify(record));
     } catch (error) {
-      console.warn("Unable to persist collection to KV", error);
+      console.error("Unable to persist collection to KV", error);
+      throw new Error("Unable to persist collection to storage.");
     }
   } else {
     console.warn(
@@ -282,13 +283,15 @@ const normalizePathname = (pathname) => {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const hmacKeyCache = new Map();
+
 
 const decodeBasicAuth = (header) => {
   if (!header) return null;
-  const [scheme, encoded] = header.split(" ", 2);
-  if (scheme !== "Basic" || !encoded) return null;
+  const match = /^Basic\s+(.+)$/i.exec(header.trim());
+  if (!match) return null;
   try {
-    const decoded = atob(encoded);
+    const decoded = atob(match[1]);
     const separatorIndex = decoded.indexOf(":");
     if (separatorIndex === -1) return null;
     return {
@@ -330,23 +333,34 @@ const decodeBase64ToString = (value) => {
 const timingSafeEqual = (a, b) => {
   const aBytes = textEncoder.encode(a);
   const bBytes = textEncoder.encode(b);
-  if (aBytes.length !== bBytes.length) return false;
-  let result = 0;
-  for (let i = 0; i < aBytes.length; i += 1) {
-    result |= aBytes[i] ^ bBytes[i];
+  let result = aBytes.length ^ bBytes.length;
+  const iterations = Math.max(aBytes.length, bBytes.length);
+
+  for (let i = 0; i < iterations; i += 1) {
+    result |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
   }
+
   return result === 0;
 };
 
-const signPayload = async (payload, secret) => {
+const getHmacKey = async (secret) => {
+  let key = hmacKeyCache.get(secret);
+  if (key) return key;
+
   const keyData = textEncoder.encode(secret);
-  const key = await crypto.subtle.importKey(
+  key = await crypto.subtle.importKey(
     "raw",
     keyData,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
   );
+  hmacKeyCache.set(secret, key);
+  return key;
+};
+
+const signPayload = async (payload, secret) => {
+  const key = await getHmacKey(secret);
   const signature = await crypto.subtle.sign("HMAC", key, textEncoder.encode(payload));
   return encodeBytesToBase64(new Uint8Array(signature));
 };
@@ -381,7 +395,7 @@ const normalizePasswordForComparison = (value) => {
   return normalizeToNfkc(effectiveValue);
 };
 
-const getAdminCredentials = (env) => {
+const getAdminCredentials = (env = {}) => {
   const username = sanitizeUsername(env.ADMIN_USERNAME) || DEFAULT_USERNAME;
   const password = sanitizePassword(env.ADMIN_PASSWORD) || DEFAULT_PASSWORD;
   const compareUsername = normalizeUsernameForComparison(username);
@@ -408,7 +422,7 @@ const areCredentialsValid = (inputUsername, inputPassword, credentials) => {
   );
 };
 
-const getSessionSecret = (env) =>
+const getSessionSecret = (env = {}) =>
   sanitizePassword(env.SESSION_SECRET) || sanitizePassword(env.ADMIN_PASSWORD) || DEFAULT_PASSWORD;
 
 const createSessionToken = async (username, env) => {
@@ -1615,6 +1629,31 @@ const handleMfcRequest = async (request, env) => {
   });
 };
 
+
+const buildForbiddenOriginResponse = () =>
+  new Response(JSON.stringify({ error: "Cross-origin state-changing requests are not allowed." }), {
+    status: 403,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+  });
+
+const ensureSameOriginMutation = (request) => {
+  const origin = request.headers.get("Origin");
+  if (!origin) return null;
+
+  try {
+    if (new URL(origin).origin === new URL(request.url).origin) {
+      return null;
+    }
+  } catch {
+    return buildForbiddenOriginResponse();
+  }
+
+  return buildForbiddenOriginResponse();
+};
+
 const handleLoginRequest = async (request, env) => {
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", {
@@ -1622,6 +1661,9 @@ const handleLoginRequest = async (request, env) => {
       headers: { Allow: "POST" },
     });
   }
+
+  const originError = ensureSameOriginMutation(request);
+  if (originError) return originError;
 
   let body;
   try {
@@ -1688,6 +1730,16 @@ const handleLoginRequest = async (request, env) => {
 };
 
 const handleLogoutRequest = async (request) => {
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { Allow: "POST" },
+    });
+  }
+
+  const originError = ensureSameOriginMutation(request);
+  if (originError) return originError;
+
   const headers = new Headers({ "Cache-Control": "no-store" });
   appendSessionInvalidationCookies(headers, request);
 
@@ -1720,6 +1772,9 @@ const handleCollectionGetRequest = async (request, env) => {
 };
 
 const handleCollectionPutRequest = async (request, env) => {
+  const originError = ensureSameOriginMutation(request);
+  if (originError) return originError;
+
   let payload;
   try {
     payload = await request.json();

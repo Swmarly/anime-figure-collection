@@ -132,6 +132,66 @@ const basicAuth = `Basic ${Buffer.from('admin:figureadmin').toString('base64')}`
   assert.deepEqual(collection.wishlist[0].tags, ['limited']);
 }
 
+
+// PUT should fail instead of reporting success when a configured KV write fails
+{
+  const env = {
+    COLLECTION: {
+      async get() {
+        return null;
+      },
+      async put() {
+        throw new Error('Simulated KV write failure');
+      },
+    },
+    ASSETS: {
+      fetch: () => new Response(null, { status: 404 }),
+    },
+  };
+
+  const response = await fetchFromWorker(
+    'https://example.com/api/collection',
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: basicAuth,
+      },
+      body: JSON.stringify({
+        owned: [{ name: 'Unsaved Figure' }],
+        wishlist: [],
+      }),
+    },
+    env,
+  );
+
+  assert.equal(response.status, 500);
+  const payload = await response.json();
+  assert(payload.error.includes('persist'));
+}
+
+// PUT should reject cross-origin state-changing requests
+{
+  const env = createEnv();
+  const response = await fetchFromWorker(
+    'https://example.com/api/collection',
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: basicAuth,
+        Origin: 'https://evil.example',
+      },
+      body: JSON.stringify({ owned: [], wishlist: [] }),
+    },
+    env,
+  );
+
+  assert.equal(response.status, 403);
+  const payload = await response.json();
+  assert(payload.error.includes('Cross-origin'));
+}
+
 console.log('Collection tests passed');
 
 // GET should not overwrite KV data when a transient read error occurs

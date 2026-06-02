@@ -75,6 +75,42 @@ const parseJson = async (response) => {
   assert.equal(response.headers.get('Allow'), 'POST');
 }
 
+
+// Basic auth should accept the RFC case-insensitive scheme spelling
+{
+  const authHeader = `basic ${Buffer.from('admin:figureadmin').toString('base64')}`;
+  const response = await fetchFromWorker('https://example.com/api/auth-check', {
+    headers: { Authorization: authHeader },
+  });
+
+  assert.equal(response.status, 204);
+}
+
+// Cross-origin login submissions should be rejected before credentials are processed
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://evil.example',
+    },
+    body: JSON.stringify({ username: 'admin', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 403);
+  const payload = await parseJson(response);
+  assert(payload?.error?.includes('Cross-origin'));
+}
+
+// Logout is a state-changing endpoint and should require POST
+{
+  const response = await fetchFromWorker('https://example.com/api/logout', {
+    method: 'GET',
+  });
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('Allow'), 'POST');
+}
+
 console.log('Auth tests passed');
 
 // The login page without an extension should be served directly to prevent redirect loops
