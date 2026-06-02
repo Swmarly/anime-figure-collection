@@ -28,6 +28,58 @@ const parseJson = async (response) => {
   }
 };
 
+
+// Debug auth endpoint should expose presence, lengths, hashes, and Pages metadata without secret values
+{
+  const env = {
+    ADMIN_USERNAME: 'admin',
+    ADMIN_PASSWORD: 'figureadmin',
+    CF_PAGES_BRANCH: 'old-main',
+    CF_PAGES_URL: 'https://old-main.anime-figure-collection.pages.dev',
+  };
+  const response = await fetchFromWorker('https://example.com/api/debug-auth-env', {}, env);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  const payload = await parseJson(response);
+  assert.deepEqual(payload, {
+    hasAdminUsername: true,
+    hasAdminPassword: true,
+    adminUsernameLength: 5,
+    adminPasswordLength: 11,
+    adminUsernameHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+    adminPasswordHash: '4da8eab54da222cb1dd2df00117d2ac66ceb9fb0fa8962a87073a10c680d7a10',
+    cfPagesBranch: 'old-main',
+    cfPagesUrl: 'https://old-main.anime-figure-collection.pages.dev',
+  });
+  assert(!JSON.stringify(payload).includes('figureadmin'));
+}
+
+// Debug auth endpoint should report missing env secrets without falling back to defaults
+{
+  const response = await fetchFromWorker('https://example.com/api/debug-auth-env');
+
+  assert.equal(response.status, 200);
+  const payload = await parseJson(response);
+  assert.equal(payload.hasAdminUsername, false);
+  assert.equal(payload.hasAdminPassword, false);
+  assert.equal(payload.adminUsernameLength, 0);
+  assert.equal(payload.adminPasswordLength, 0);
+  assert.equal(payload.adminUsernameHash, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  assert.equal(payload.adminPasswordHash, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+}
+
+// Login should trim username input before comparison
+{
+  const response = await fetchFromWorker('https://example.com/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: '  admin  ', password: 'figureadmin' }),
+  });
+
+  assert.equal(response.status, 200);
+}
+
 // Successful login with default credentials
 {
   const response = await fetchFromWorker('https://example.com/api/login', {

@@ -285,6 +285,13 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const hmacKeyCache = new Map();
 
+const bytesToHex = (bytes) =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const sha256 = async (value) => {
+  const digest = await crypto.subtle.digest("SHA-256", textEncoder.encode(value));
+  return bytesToHex(new Uint8Array(digest));
+};
 
 const decodeBasicAuth = (header) => {
   if (!header) return null;
@@ -1654,6 +1661,36 @@ const ensureSameOriginMutation = (request) => {
   return buildForbiddenOriginResponse();
 };
 
+const handleDebugAuthEnvRequest = async (request, env = {}) => {
+  if (request.method !== "GET") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: { Allow: "GET" },
+    });
+  }
+
+  const adminUsername = env.ADMIN_USERNAME || "";
+  const adminPassword = env.ADMIN_PASSWORD || "";
+  const payload = {
+    hasAdminUsername: Boolean(env.ADMIN_USERNAME),
+    hasAdminPassword: Boolean(env.ADMIN_PASSWORD),
+    adminUsernameLength: env.ADMIN_USERNAME ? env.ADMIN_USERNAME.length : 0,
+    adminPasswordLength: env.ADMIN_PASSWORD ? env.ADMIN_PASSWORD.length : 0,
+    adminUsernameHash: await sha256(adminUsername),
+    adminPasswordHash: await sha256(adminPassword),
+    cfPagesBranch: env.CF_PAGES_BRANCH || null,
+    cfPagesUrl: env.CF_PAGES_URL || null,
+  };
+
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+  });
+};
+
 const handleLoginRequest = async (request, env) => {
   if (request.method !== "POST") {
     return new Response("Method Not Allowed", {
@@ -1675,8 +1712,8 @@ const handleLoginRequest = async (request, env) => {
     });
   }
 
-  const inputUsername =
-    typeof body?.username === "string" ? sanitizeUsername(body.username) || "" : "";
+  const rawUsername = typeof body?.username === "string" ? body.username : "";
+  const inputUsername = sanitizeUsername(rawUsername) || "";
   const rawPassword = typeof body?.password === "string" ? body.password : "";
   const normalizedPassword = sanitizePassword(rawPassword);
   const inputPassword = normalizedPassword !== null ? normalizedPassword : rawPassword;
@@ -1697,6 +1734,16 @@ const handleLoginRequest = async (request, env) => {
   }
 
   if (!areCredentialsValid(inputUsername, inputPassword, credentials)) {
+    console.log({
+      branch: env.CF_PAGES_BRANCH,
+      hasAdminUsername: Boolean(env.ADMIN_USERNAME),
+      hasAdminPassword: Boolean(env.ADMIN_PASSWORD),
+      providedUsernameLength: inputUsername?.length,
+      expectedUsernameLength: env.ADMIN_USERNAME?.length,
+      passwordProvided: Boolean(inputPassword),
+      expectedPasswordExists: Boolean(env.ADMIN_PASSWORD),
+    });
+
     return new Response(JSON.stringify({ error: "Invalid username or password." }), {
       status: 401,
       headers: {
@@ -1827,6 +1874,10 @@ export default {
     const url = new URL(request.url);
 
     const pathname = normalizePathname(url.pathname);
+
+    if (pathname === "/api/debug-auth-env") {
+      return handleDebugAuthEnvRequest(request, env);
+    }
 
     if (pathname === "/api/login") {
       return handleLoginRequest(request, env);
