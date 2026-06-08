@@ -29,7 +29,12 @@ const clampInitialIndex = (image: LightboxImage, imageCount: number) => {
   return Math.min(Math.max(requestedIndex, 0), imageCount - 1);
 };
 
+const preloadedImages = new Set<string>();
+
 const preloadImage = (src: string) => {
+  if (preloadedImages.has(src)) return;
+
+  preloadedImages.add(src);
   const image = new Image();
   image.decoding = "async";
   image.src = src;
