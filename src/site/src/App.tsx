@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { siteConfig } from "./config";
 import { CollectionSection } from "./components/CollectionSection";
 import { Hero } from "./components/Hero";
@@ -16,6 +16,15 @@ export const App = () => {
   const [queryBySection, setQueryBySection] = useState({ owned: "", wishlist: "" });
   const [sortKey, setSortKey] = useState<SortKey>(defaultSortKey);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
+  const closeLightbox = useCallback(() => setLightboxImage(null), []);
+  const updateOwnedQuery = useCallback(
+    (query: string) => setQueryBySection((current) => ({ ...current, owned: query })),
+    []
+  );
+  const updateWishlistQuery = useCallback(
+    (query: string) => setQueryBySection((current) => ({ ...current, wishlist: query })),
+    []
+  );
 
   return (
     <div className="app-shell">
@@ -62,7 +71,7 @@ export const App = () => {
           query={queryBySection.owned}
           sortKey={sortKey}
           isLoading={isLoading}
-          onQueryChange={(query) => setQueryBySection((current) => ({ ...current, owned: query }))}
+          onQueryChange={updateOwnedQuery}
           onSortChange={setSortKey}
           onImageOpen={setLightboxImage}
         />
@@ -73,13 +82,13 @@ export const App = () => {
           query={queryBySection.wishlist}
           sortKey={sortKey}
           isLoading={isLoading}
-          onQueryChange={(query) => setQueryBySection((current) => ({ ...current, wishlist: query }))}
+          onQueryChange={updateWishlistQuery}
           onSortChange={setSortKey}
           onImageOpen={setLightboxImage}
         />
       </main>
 
-      <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+      <Lightbox image={lightboxImage} onClose={closeLightbox} />
 
       <footer className="site-footer">
         <p>{siteConfig.footerNote}</p>

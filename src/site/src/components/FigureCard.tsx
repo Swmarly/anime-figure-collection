@@ -1,4 +1,5 @@
-import { formatReleaseDate, getFigureAlt, getFigureImage, getFigureImages, getMfcLink } from "../lib/collection";
+import { memo, useMemo } from "react";
+import { formatReleaseDate, getFigureAlt, getFigureImages, getMfcLink } from "../lib/collection";
 import type { Figure, FigureStatus } from "../types";
 import { Icon } from "./Icon";
 import type { LightboxImage } from "./Lightbox";
@@ -14,17 +15,18 @@ const statusLabels: Record<FigureStatus, string> = {
   wishlist: "Wishlist"
 };
 
-export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => {
-  const images = getFigureImages(figure);
-  const image = getFigureImage(figure);
-  const mfcLink = getMfcLink(figure);
+const FigureCardComponent = ({ figure, status, onImageOpen }: FigureCardProps) => {
+  const images = useMemo(() => getFigureImages(figure), [figure]);
+  const image = images[0] ?? null;
+  const mfcLink = useMemo(() => getMfcLink(figure), [figure]);
   const title = figure.name?.trim() || "Untitled figure";
-  const details = [
+  const alt = useMemo(() => getFigureAlt(figure), [figure]);
+  const details = useMemo(() => [
     { label: "Series", value: figure.series },
     { label: "Maker", value: figure.manufacturer },
     { label: "Scale", value: figure.scale },
     { label: "Release", value: formatReleaseDate(figure.releaseDate) }
-  ];
+  ], [figure.manufacturer, figure.releaseDate, figure.scale, figure.series]);
 
   return (
     <article className="figure-card">
@@ -39,13 +41,13 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
                 src: image,
                 images,
                 initialIndex: 0,
-                alt: getFigureAlt(figure),
+                alt,
                 title,
                 meta: figure.series
               })
             }
           >
-            <img src={image} alt={getFigureAlt(figure)} loading="lazy" decoding="async" />
+            <img src={image} alt={alt} loading="lazy" decoding="async" />
           </button>
         ) : (
           <div className="figure-card__placeholder" aria-label="No figure image available">
@@ -95,3 +97,5 @@ export const FigureCard = ({ figure, status, onImageOpen }: FigureCardProps) => 
     </article>
   );
 };
+
+export const FigureCard = memo(FigureCardComponent);
