@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { defaultSortKey, sectionContent, siteConfig } from "../config";
 import { filterFigures, getFigureId, sortFigures } from "../lib/collection";
 import type { Figure, FigureStatus, SortKey } from "../types";
@@ -18,7 +19,7 @@ type CollectionSectionProps = {
 
 const skeletonCards = Array.from({ length: 6 }, (_, index) => `skeleton-${index}`);
 
-export const CollectionSection = ({
+const CollectionSectionComponent = ({
   status,
   figures,
   query,
@@ -29,7 +30,10 @@ export const CollectionSection = ({
   onImageOpen
 }: CollectionSectionProps) => {
   const content = sectionContent[status];
-  const visibleFigures = sortFigures(filterFigures(figures, query), sortKey || defaultSortKey);
+  const visibleFigures = useMemo(
+    () => sortFigures(filterFigures(figures, query), sortKey || defaultSortKey),
+    [figures, query, sortKey]
+  );
   const emptyMessage = query
     ? "No matching figures found. Try a different name, series, maker, or tag."
     : siteConfig.emptyStates[status];
@@ -78,3 +82,5 @@ export const CollectionSection = ({
     </section>
   );
 };
+
+export const CollectionSection = memo(CollectionSectionComponent);

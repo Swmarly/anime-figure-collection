@@ -29,6 +29,21 @@ const clampInitialIndex = (image: LightboxImage, imageCount: number) => {
   return Math.min(Math.max(requestedIndex, 0), imageCount - 1);
 };
 
+const preloadImage = (src: string) => {
+  const image = new Image();
+  image.decoding = "async";
+  image.src = src;
+};
+
+const getAdjacentImages = (images: string[], activeIndex: number): string[] => {
+  if (images.length <= 1) return [];
+
+  const previous = images[(activeIndex - 1 + images.length) % images.length];
+  const next = images[(activeIndex + 1) % images.length];
+
+  return Array.from(new Set([previous, next].filter((source): source is string => Boolean(source))));
+};
+
 const LightboxContent = ({ image, onClose }: { image: LightboxImage; onClose: () => void }) => {
   const images = useMemo(() => normalizeLightboxImages(image), [image]);
   const [activeIndex, setActiveIndex] = useState(() => clampInitialIndex(image, images.length));
@@ -68,6 +83,10 @@ const LightboxContent = ({ image, onClose }: { image: LightboxImage; onClose: ()
     };
   }, [hasMultipleImages, onClose, showNext, showPrevious]);
 
+  useEffect(() => {
+    getAdjacentImages(images, activeIndex).forEach(preloadImage);
+  }, [activeIndex, images]);
+
   return (
     <div className="lightbox" role="dialog" aria-modal="true" aria-label={`${image.title} image preview`}>
       <button className="lightbox__backdrop" type="button" aria-label="Close image preview" onClick={onClose} />
@@ -86,7 +105,7 @@ const LightboxContent = ({ image, onClose }: { image: LightboxImage; onClose: ()
               ‹
             </button>
           ) : null}
-          <img src={activeSrc} alt={image.alt} />
+          <img src={activeSrc} alt={image.alt} loading="eager" decoding="async" fetchPriority="high" />
           {hasMultipleImages ? (
             <button
               className="lightbox__nav lightbox__nav--next"
