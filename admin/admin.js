@@ -41,16 +41,22 @@ const fields = {
   notes: field("figure-notes"),
 };
 
-const THEME_STORAGE_KEY = "kawaii-theme-preference";
+const THEME_STORAGE_KEY = "figure-vault-theme";
+const LEGACY_THEME_STORAGE_KEY = "kawaii-theme-preference";
+const THEME_STORAGE_KEYS = [THEME_STORAGE_KEY, LEGACY_THEME_STORAGE_KEY];
 const prefersDarkScheme = window.matchMedia
   ? window.matchMedia("(prefers-color-scheme: dark)")
   : { matches: false, addEventListener: () => {}, removeEventListener: () => {} };
 
+const isThemePreference = (value) => value === "dark" || value === "light";
+
 const readStoredThemePreference = () => {
   try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "dark" || stored === "light") {
-      return stored;
+    for (const key of THEME_STORAGE_KEYS) {
+      const stored = window.localStorage.getItem(key);
+      if (isThemePreference(stored)) {
+        return stored;
+      }
     }
   } catch (error) {
     console.warn("Unable to read stored theme preference", error);
@@ -61,14 +67,11 @@ const readStoredThemePreference = () => {
 let storedThemePreference = readStoredThemePreference();
 
 const applyTheme = (theme) => {
-  if (theme === "dark") {
-    document.documentElement.setAttribute("data-theme", "dark");
-  } else {
-    document.documentElement.removeAttribute("data-theme");
-  }
+  document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
 };
 
-const getPreferredTheme = () => storedThemePreference ?? (prefersDarkScheme.matches ? "dark" : "light");
+const getPreferredTheme = () =>
+  storedThemePreference ?? (prefersDarkScheme.matches ? "dark" : "light");
 
 const applyPreferredTheme = () => {
   applyTheme(getPreferredTheme());
@@ -86,16 +89,15 @@ if (prefersDarkScheme && typeof prefersDarkScheme.addEventListener === "function
 }
 
 window.addEventListener("storage", (event) => {
-  if (event.key !== THEME_STORAGE_KEY) {
+  if (!THEME_STORAGE_KEYS.includes(event.key)) {
     return;
   }
 
-  if (event.newValue === "dark" || event.newValue === "light") {
-    storedThemePreference = event.newValue;
-  } else {
-    storedThemePreference = null;
+  if (event.key === LEGACY_THEME_STORAGE_KEY && window.localStorage.getItem(THEME_STORAGE_KEY)) {
+    return;
   }
 
+  storedThemePreference = isThemePreference(event.newValue) ? event.newValue : null;
   applyPreferredTheme();
 });
 
@@ -353,6 +355,9 @@ const normalizeImageList = (...values) => {
 
   return Array.from(new Set(images));
 };
+
+const getEntryPreviewImage = (entry = {}) =>
+  normalizeImageList(entry.images, entry.image)[0] || null;
 
 const imageListsMatch = (first, second) => {
   const firstImages = normalizeImageList(first);
@@ -639,6 +644,10 @@ const renderManagerSection = (title, listKey, items = []) => {
       const meta = metaParts.length
         ? `<div class="manager__meta">${metaParts.join(" · ")}</div>`
         : "";
+      const previewImage = getEntryPreviewImage(entry);
+      const previewMarkup = previewImage
+        ? `<img class="manager__thumb" src="${escapeHtml(previewImage)}" alt="" loading="lazy" decoding="async" />`
+        : '<span class="manager__thumb manager__thumb--empty" aria-hidden="true">No image</span>';
       const slugAttr = entry.slug ? escapeHtml(entry.slug) : "";
       const mfcAttr = entry.mfcId ? escapeHtml(String(entry.mfcId)) : "";
       const deleteDisabled = state.saving ? " disabled" : "";
@@ -653,8 +662,11 @@ const renderManagerSection = (title, listKey, items = []) => {
               data-slug="${slugAttr}"
               data-mfc-id="${mfcAttr}"
             >
-              <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
-              ${meta}
+              ${previewMarkup}
+              <span class="manager__details">
+                <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
+                ${meta}
+              </span>
             </button>
             <button
               type="button"
