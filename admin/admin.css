@@ -475,10 +475,12 @@ textarea.field__input {
   border-radius: var(--radius-md);
   background: var(--panel-solid);
   color: var(--text);
-  padding: 0.8rem 0.9rem;
+  padding: 0.65rem 0.75rem;
   text-align: left;
   display: grid;
-  gap: 0.32rem;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
@@ -495,6 +497,38 @@ textarea.field__input {
   font-size: 0.94rem;
   font-weight: 900;
 }
+.manager__details {
+  display: grid;
+  min-width: 0;
+  gap: 0.32rem;
+}
+
+.manager__thumb {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.72);
+  object-fit: cover;
+  box-shadow: 0 0.35rem 0.9rem rgba(98, 54, 104, 0.12);
+}
+
+:root[data-theme="dark"] .manager__thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.manager__thumb--empty {
+  display: grid;
+  place-items: center;
+  padding: 0.2rem;
+  color: var(--subtle);
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1.05;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 
 .manager__delete {
   border-radius: var(--radius-md);

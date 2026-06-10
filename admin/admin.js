@@ -354,6 +354,8 @@ const normalizeImageList = (...values) => {
   return Array.from(new Set(images));
 };
 
+const getEntryPreviewImage = (entry = {}) => normalizeImageList(entry.images, entry.image)[0] || null;
+
 const imageListsMatch = (first, second) => {
   const firstImages = normalizeImageList(first);
   const secondImages = normalizeImageList(second);
@@ -639,6 +641,10 @@ const renderManagerSection = (title, listKey, items = []) => {
       const meta = metaParts.length
         ? `<div class="manager__meta">${metaParts.join(" · ")}</div>`
         : "";
+      const previewImage = getEntryPreviewImage(entry);
+      const previewMarkup = previewImage
+        ? `<img class="manager__thumb" src="${escapeHtml(previewImage)}" alt="" loading="lazy" decoding="async" />`
+        : '<span class="manager__thumb manager__thumb--empty" aria-hidden="true">No image</span>';
       const slugAttr = entry.slug ? escapeHtml(entry.slug) : "";
       const mfcAttr = entry.mfcId ? escapeHtml(String(entry.mfcId)) : "";
       const deleteDisabled = state.saving ? " disabled" : "";
@@ -653,8 +659,11 @@ const renderManagerSection = (title, listKey, items = []) => {
               data-slug="${slugAttr}"
               data-mfc-id="${mfcAttr}"
             >
-              <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
-              ${meta}
+              ${previewMarkup}
+              <span class="manager__details">
+                <span class="manager__name">${escapeHtml(getEntryLabel(entry))}</span>
+                ${meta}
+              </span>
             </button>
             <button
               type="button"
