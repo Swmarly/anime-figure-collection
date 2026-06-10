@@ -1,100 +1,277 @@
 # Anime Figure Collection
 
-Anime Figure Collection is a stylized gallery and admin console for cataloging a personal collection of anime figures. The public site is a static, animation-heavy showcase, while a Cloudflare Worker exposes an authenticated JSON API and serves every asset. Updates happen in real time—no rebuilds, no manual uploads.
+Anime Figure Collection is a personal figure shelf site with two parts:
 
-## Highlights
-- **Single Worker deployment** – `_worker.js` serves the gallery, admin interface, and API endpoints from the same Cloudflare Worker.
-- **JSON-first data model** – All collection data lives in a simple `{ owned: Figure[], wishlist: Figure[] }` shape that can be exported or edited manually.
-- **KV-backed persistence** – When a Cloudflare KV namespace is bound, the collection is durable; otherwise, the Worker falls back to an in-memory cache for local development.
-- **Password-protected admin console** – `/admin` provides a lightweight SPA for editing entries, importing data, and managing the collection.
+- a polished public React gallery for browsing owned figures and wishlist entries; and
+- a private Cloudflare Worker admin panel for editing the collection data without redeploying the site.
+
+The public app reads the current collection from `/api/collection`. The admin app writes the same JSON record back to Cloudflare KV, can import metadata from MyFigureCollection, and can refresh stale MFC image URLs when thumbnails move.
+
+## What it does
+
+### Public collection site
+
+- Displays separate **Owned figures** and **Wishlist** sections.
+- Shows collection metrics in the hero, including totals and last-updated state.
+- Supports search and release/name sorting for each section.
+- Opens figure photos in an accessible lightbox with multi-image navigation.
+- Links entries back to MyFigureCollection when an MFC URL or item ID is available.
+- Includes a theme toggle and responsive styling for desktop and mobile screens.
+
+### Private admin panel
+
+- Password-protected `/admin` area with login, logout, and session checks.
+- Add, edit, remove, preview, and save collection entries.
+- Import item details from MyFigureCollection by item number or URL.
+- Refresh a single MFC image or bulk-refresh every entry with an MFC item number.
+- Download a normalized JSON backup of the current collection.
+- Copy the current entry JSON for manual edits or debugging.
+
+### Worker and storage
+
+- A single Cloudflare Worker serves static assets, admin pages, and JSON API routes.
+- Cloudflare KV stores the collection under the `collection` key.
+- If KV is missing in local development, the Worker falls back to in-memory storage.
+- The Worker seeds an empty `{ owned: [], wishlist: [] }` collection when KV has no record yet.
+- Admin mutations require an authenticated session and same-origin requests.
 
 ## Repository layout
-```
+
+```text
 .
-├── index.html          # Public landing page for the gallery
-├── styles.css          # Soft gradients, sparkles, and responsive layout rules
-├── script.js           # Fetches the collection JSON and renders cards
-├── worker.js           # Cloudflare Worker handling assets, API routes, and auth
-├── _worker.js          # Entry point re-export for Wrangler/Pages compatibility
-├── data/
-│   └── default-collection.js  # Seed data used on first run
-├── admin/
-│   ├── index.html      # Authenticated admin SPA
-│   ├── admin.js        # CRUD helpers, form bindings, and import utilities
-│   ├── admin.css       # Styling for the admin interface
-│   ├── login.html      # Public login view served at /admin/login.html
-│   ├── login.js        # Handles Basic Auth and session token management
-│   └── login.css       # Styling for the login view
-├── wrangler.toml       # Wrangler configuration for the Worker
-└── tests/              # Smoke tests for data normalization utilities
+├── src/site/                 # Vite + React source for the public gallery
+│   ├── index.html
+│   └── src/
+│       ├── App.tsx
+│       ├── components/       # Hero, cards, controls, lightbox, theme toggle
+│       ├── hooks/            # Collection fetch hook
+│       ├── lib/              # Filtering, sorting, formatting, metrics helpers
+│       ├── config.ts         # Public copy and sort options
+│       └── types.ts          # Collection and figure types
+├── admin/                    # Static private admin interface
+│   ├── index.html
+│   ├── admin.js
+│   ├── admin.css
+│   ├── login.html
+│   ├── login.js
+│   └── login.css
+├── data/default-collection.js # Starter collection used when KV is empty
+├── scripts/publish-site.mjs  # Copies the Vite build into root assets for Worker deploys
+├── tests/                    # Worker, auth, collection, and MFC smoke tests
+├── worker.js                 # Cloudflare Worker implementation
+├── _worker.js                # Worker entry re-export used by Wrangler
+├── vite.config.ts            # Vite config; proxies /api to Wrangler during development
+├── wrangler.toml             # Worker, assets, secrets, and KV configuration
+├── package.json              # npm scripts and dependencies
+└── readme.md
 ```
+
+## Collection data shape
+
+The API returns a collection payload like this:
+
+```json
+{
+  "owned": [],
+  "wishlist": [],
+  "updatedAt": "2026-06-10T00:00:00.000Z"
+}
+```
+
+Each figure can contain these fields:
+
+```json
+{
+  "slug": "example-figure",
+  "name": "Example Figure",
+  "series": "Example Series",
+  "manufacturer": "Example Maker",
+  "scale": "1/7",
+  "releaseDate": "2026-06",
+  "image": "https://example.com/main.jpg",
+  "images": ["https://example.com/main.jpg", "https://example.com/alternate.jpg"],
+  "alt": "Example Figure product photo",
+  "caption": "Displayed on the top shelf",
+  "description": "Optional public notes.",
+  "tags": ["pastel", "limited"],
+  "mfcId": 123456,
+  "links": {
+    "mfc": "https://myfigurecollection.net/item/123456"
+  }
+}
+```
+
+Notes:
+
+- `owned` and `wishlist` are always arrays.
+- `updatedAt` is set by the Worker whenever the admin panel saves the collection.
+- Empty strings, empty arrays, and invalid values are cleaned before storage.
+- `mfcId` and `links.mfc` are used by the admin panel and public cards to connect entries to MyFigureCollection.
 
 ## Requirements
-- Node.js 18+ (for running Wrangler locally)
-- Wrangler CLI (`npm install -g wrangler`)
-- A Cloudflare account with access to Workers and KV
+
+- Node.js 18 or newer.
+- npm.
+- A Cloudflare account for deployment.
+- Wrangler for local Worker development and deployment. You can use `npx wrangler` without installing it globally.
+
+## Install
+
+```bash
+npm install
+```
+
+## Local development
+
+### Public React app
+
+Start Vite:
+
+```bash
+npm run dev
+```
+
+Vite serves the public app from `src/site` and proxies `/api` calls to `http://localhost:8787`.
+
+### Worker API and admin panel
+
+In a second terminal, start Wrangler:
+
+```bash
+npx wrangler dev
+```
+
+Useful local URLs:
+
+- Public Worker site: `http://localhost:8787/`
+- Admin panel: `http://localhost:8787/admin`
+- Login page: `http://localhost:8787/admin/login.html`
+- Collection API: `http://localhost:8787/api/collection`
+
+Default local credentials are:
+
+- username: `admin`
+- password: `figureadmin`
+
+Set real secrets before deploying anything public.
+
+## npm scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the Vite dev server for the React gallery. |
+| `npm run build` | Type-checks, builds the React app, copies the built `index.html` and hashed assets into the Worker-served root, then removes `dist/`. |
+| `npm run preview` | Starts Vite preview when a `dist/` build is present. Note that `npm run build` publishes assets into the repository root and removes `dist/`. |
+| `npm run lint` | Runs ESLint against `src` and `vite.config.ts` with zero warnings allowed. |
+| `npm test` | Runs the Worker/auth, collection normalization, and MFC helper tests. |
+
+## Worker API
+
+| Route | Method | Auth | Purpose |
+| --- | --- | --- | --- |
+| `/api/collection` | `GET` | No | Returns the public collection payload. |
+| `/api/collection` | `PUT` | Yes | Saves a normalized collection payload and updates `updatedAt`. |
+| `/api/login` | `POST` | No | Validates admin credentials and sets the session cookie. |
+| `/api/logout` | `POST` | Session | Clears admin session cookies. |
+| `/api/auth-check` | `GET` | Session or Basic Auth | Returns `204` when the current admin session is valid. |
+| `/api/mfc` | `GET` | Yes | Looks up a MyFigureCollection item for admin import/refresh workflows. |
+
+Protected HTML under `/admin` redirects to `/admin/login.html` when the request accepts HTML and no valid session is present.
 
 ## Configuration
-The Worker recognizes the following environment bindings:
 
-| Name | Type | Purpose |
-| ---- | ---- | ------- |
-| `COLLECTION` | KV namespace | Primary storage for the gallery data. The Worker also accepts `FIGURE_COLLECTION`, `FIGURE_COLLECTION_KV`, or `COLLECTION_KV` as binding names. |
-| `ADMIN_USERNAME` | Secret | Overrides the default admin username (`admin`). |
-| `ADMIN_PASSWORD` | Secret | Overrides the default admin password (`figureadmin`). Set this before deploying publicly. |
-| `SESSION_SECRET` | Secret | Optional. If omitted, the Worker reuses `ADMIN_PASSWORD` for signing admin sessions. |
+The Worker reads these Cloudflare bindings and secrets:
 
-When no KV binding is configured the Worker caches data in-memory. This is sufficient for local development but changes are lost between deployments.
+| Name | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `COLLECTION` | KV namespace | Production recommended | Primary collection storage. |
+| `FIGURE_COLLECTION` | KV namespace | No | Accepted fallback binding name. |
+| `FIGURE_COLLECTION_KV` | KV namespace | No | Accepted fallback binding name. |
+| `COLLECTION_KV` | KV namespace | No | Accepted fallback binding name. |
+| `ADMIN_USERNAME` | Secret | Yes for deploys | Admin username. Defaults to `admin` if omitted. |
+| `ADMIN_PASSWORD` | Secret | Yes for deploys | Admin password. Defaults to `figureadmin` if omitted. |
+| `SESSION_SECRET` | Secret | Recommended | HMAC secret for admin sessions. Falls back to `ADMIN_PASSWORD` when omitted. |
 
-Cloudflare KV entries created by this Worker do **not** use expiration or TTL options; the `collection` record remains until you manually delete the namespace contents.
+`wrangler.toml` currently defines the Worker name, root asset serving, production and preview KV bindings, and required admin secrets.
 
-## Run locally
-1. Install dependencies: `npm install -g wrangler` (or use `npx wrangler` in every command).
-2. Start the development server:
+## Deploying
+
+1. Build the public site assets:
+
    ```bash
-   wrangler dev
+   npm run build
    ```
-3. Open `http://localhost:8787` to view the gallery. Visit `http://localhost:8787/admin/login.html` to access the admin console (default credentials: `admin` / `figureadmin`).
 
-## Deploy to your own Cloudflare account
-1. **Install Wrangler and authenticate**
-   ```bash
-   npm install -g wrangler
-   wrangler login
-   ```
-2. **Create a KV namespace** for the collection data. Replace `my-figure-collection` with a unique name:
-   ```bash
-   wrangler kv namespace create collection
-   ```
-   Wrangler will output an `id` (and `preview_id`). Copy the production `id` into `wrangler.toml` under the `[[kv_namespaces]]` section. Example:
-   ```toml
-   [[kv_namespaces]]
-   binding = "COLLECTION"
-   id = "<your-production-id>"
-   preview_id = "<your-preview-id>"
-   ```
-3. **Configure secrets** for admin authentication. Replace the placeholder values with secure credentials:
-   ```bash
-   wrangler secret put ADMIN_USERNAME
-   wrangler secret put ADMIN_PASSWORD
-   wrangler secret put SESSION_SECRET
-   ```
-4. **Publish the Worker**:
-   ```bash
-   wrangler deploy
-   ```
-5. **Visit your Worker URL** (shown after deploy). The admin console lives at `/admin`, with a dedicated login page at `/admin/login.html`.
+2. Log in to Cloudflare:
 
-### Optional: seed your own data
-- Edit `data/default-collection.js` before deploying to customize the starter figures.
-- From the admin console, use the “Export” option to download a JSON backup, modify it, and re-import it.
+   ```bash
+   npx wrangler login
+   ```
 
-## Testing
-Run the lightweight test suite to verify data utilities:
+3. Create a KV namespace if you are deploying to a new Cloudflare account:
+
+   ```bash
+   npx wrangler kv namespace create COLLECTION
+   ```
+
+   Copy the returned namespace ID into the `[[kv_namespaces]]` block in `wrangler.toml`. Add or update the preview namespace under `[[env.preview.kv_namespaces]]` if needed.
+
+4. Set admin secrets:
+
+   ```bash
+   npx wrangler secret put ADMIN_USERNAME
+   npx wrangler secret put ADMIN_PASSWORD
+   npx wrangler secret put SESSION_SECRET
+   ```
+
+5. Deploy:
+
+   ```bash
+   npx wrangler deploy
+   ```
+
+6. Open the deployed Worker URL and sign in at `/admin` to add or import figures.
+
+## Common admin workflow
+
+1. Sign in at `/admin`.
+2. Paste a MyFigureCollection item number or item URL into the lookup form.
+3. Fetch details, review the generated fields, and adjust anything personal such as notes, tags, caption, or image alt text.
+4. Choose whether the entry belongs in **Owned** or **Wishlist**.
+5. Add or update the entry.
+6. Save changes to Cloudflare.
+7. Download a JSON backup after large edits.
+
+## Testing and quality checks
+
+Run the standard checks before deploying:
+
 ```bash
+npm run lint
 npm test
+npm run build
 ```
-(Uses Node’s built-in test runner and does not require additional dependencies.)
+
+The test suite runs directly in Node and imports the Worker module. It covers authentication/session behavior, collection normalization/storage behavior, and MFC parsing/image helper behavior.
+
+## Troubleshooting
+
+### The admin panel saves locally but data disappears later
+
+The Worker is probably running without a KV binding. Add the `COLLECTION` KV namespace binding to `wrangler.toml` and deploy again.
+
+### The public site cannot fetch the collection during Vite development
+
+Start Wrangler on `http://localhost:8787` in a second terminal. Vite proxies `/api` requests there.
+
+### MFC import or image refresh fails
+
+MyFigureCollection may block, change markup, or omit an image. Try again later, keep the existing image URL, or paste an image URL manually in the admin form.
+
+### Login loops or stale sessions
+
+Use the sign-out button or clear cookies for the site. The Worker also clears invalid session cookies when protected admin pages are requested.
 
 ## License
+
 This project is released under the [Creative Commons Attribution-NonCommercial 4.0 International License](./LICENSE). You may use and adapt the code for non-commercial purposes as long as you provide proper attribution to the Anime Figure Collection contributors.
