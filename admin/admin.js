@@ -1087,7 +1087,9 @@ const fetchMfcDetails = async (itemId) => {
       }
     }
 
-    throw new Error(message || "Lookup failed. Please try again.");
+    const error = new Error(message || "Lookup failed. Please try again.");
+    error.status = response.status;
+    throw error;
   }
 
   if (!contentType.includes("application/json")) {
@@ -1271,10 +1273,14 @@ const handleRefreshAllMfcImages = async () => {
   let updatedCount = 0;
   let localFallbackCount = 0;
   let blockedWithExistingImageCount = 0;
+  let consecutiveServerErrors = 0;
+  let stoppedAfterServerErrors = false;
+  let checkedCount = 0;
   const failures = [];
 
   try {
     for (const [targetIndex, target] of targets.entries()) {
+      checkedCount = targetIndex + 1;
       const label = getEntryLabel(target.entry);
       lookupFeedback.textContent = `Refreshing image ${targetIndex + 1}/${targets.length}: ${label}…`;
 
@@ -1284,6 +1290,7 @@ const handleRefreshAllMfcImages = async () => {
 
       try {
         const data = await fetchMfcDetails(target.itemId);
+        consecutiveServerErrors = 0;
         const latestImages = normalizeImageList(data.images, data.image);
         const latestImage = latestImages[0] || "";
 
@@ -1299,6 +1306,10 @@ const handleRefreshAllMfcImages = async () => {
                 action: "updated",
                 from: null,
               });
+            }
+            if (consecutiveServerErrors >= 3) {
+              stoppedAfterServerErrors = true;
+              break;
             }
             await waitBeforeNextBulkRefresh(targetIndex, targets.length);
             continue;
@@ -1326,6 +1337,12 @@ const handleRefreshAllMfcImages = async () => {
           throw error;
         }
 
+        if (Number(error?.status) >= 502) {
+          consecutiveServerErrors += 1;
+        } else {
+          consecutiveServerErrors = 0;
+        }
+
         if (localFullSizeImage && localFullSizeImage !== currentImage) {
           const updatedEntry = updateEntryImageFromMfc(target, localFullSizeImage);
           if (updatedEntry) {
@@ -1338,17 +1355,29 @@ const handleRefreshAllMfcImages = async () => {
               from: null,
             });
           }
+          if (consecutiveServerErrors >= 3) {
+            stoppedAfterServerErrors = true;
+            break;
+          }
           await waitBeforeNextBulkRefresh(targetIndex, targets.length);
           continue;
         }
 
         if (currentImage) {
           blockedWithExistingImageCount += 1;
+          if (consecutiveServerErrors >= 3) {
+            stoppedAfterServerErrors = true;
+            break;
+          }
           await waitBeforeNextBulkRefresh(targetIndex, targets.length);
           continue;
         }
 
         failures.push(`${label}: ${error.message || "Unable to refresh image"}`);
+        if (consecutiveServerErrors >= 3) {
+          stoppedAfterServerErrors = true;
+          break;
+        }
       }
 
       await waitBeforeNextBulkRefresh(targetIndex, targets.length);
@@ -1369,17 +1398,23 @@ const handleRefreshAllMfcImages = async () => {
       ? ` ${failures.length} failed: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? "…" : ""}`
       : "";
 
+    const stoppedSummary = stoppedAfterServerErrors
+      ? ` Stopped after repeated MFC lookup errors (${checkedCount}/${targets.length} checked). Try again later; unavailable entries were left unchanged.`
+      : "";
+
     if (updatedCount > 0) {
       lookupFeedback.textContent = `Updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}. Saving to Cloudflare…`;
       const result = await persistCollection();
       const savedSuffix = result?.updatedAt
         ? ` Synced at ${formatSavedTimestamp(result.updatedAt)}.`
         : " Synced to Cloudflare.";
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${fallbackSummary}${blockedSummary}${failureSummary}`;
-    } else if (failures.length === targets.length) {
-      lookupFeedback.textContent = `Tried ${targets.length} MFC item${targets.length === 1 ? "" : "s"}, but every image refresh failed.${blockedSummary}${failureSummary}`;
+      lookupFeedback.textContent = `${stoppedAfterServerErrors ? `Checked ${checkedCount}/${targets.length} MFC items before stopping` : `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}`}; updated ${updatedCount} image URL${updatedCount === 1 ? "" : "s"}.${savedSuffix}${fallbackSummary}${blockedSummary}${failureSummary}${stoppedSummary}`;
+    } else if (!stoppedAfterServerErrors && failures.length === targets.length) {
+      lookupFeedback.textContent = `${stoppedAfterServerErrors ? `Checked ${checkedCount}/${targets.length} MFC items before stopping` : `Tried ${targets.length} MFC item${targets.length === 1 ? "" : "s"}`}, but every image refresh failed.${blockedSummary}${failureSummary}${stoppedSummary}`;
     } else {
-      lookupFeedback.textContent = `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${blockedSummary}${failureSummary}`;
+      lookupFeedback.textContent = stoppedAfterServerErrors
+        ? `Checked ${checkedCount}/${targets.length} MFC items; no image URLs changed.${blockedSummary}${stoppedSummary}${failureSummary}`
+        : `Refreshed ${targets.length} MFC item${targets.length === 1 ? "" : "s"}; no image URLs changed.${blockedSummary}${failureSummary}`;
     }
 
     if (failures.length) {
