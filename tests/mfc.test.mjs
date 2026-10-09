@@ -227,8 +227,8 @@ try {
   const authHeader = 'Basic ' + Buffer.from('admin:figureadmin').toString('base64');
   const response = await worker.default.fetch(
     new Request('https://example.com/api/mfc?item=1685257', { headers: { Authorization: authHeader } }),
-    {},
     { MFC_API_URL: 'https://bridge.example', MFC_API_TOKEN: 'bridge-secret' },
+    {},
   );
   assert.equal(response.status, 200);
   const payload = await response.json();
