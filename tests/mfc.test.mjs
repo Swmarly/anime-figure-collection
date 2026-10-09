@@ -280,12 +280,17 @@ try {
   globalThis.fetch = async () => {
     throw new Error('An invalid image URL must not be fetched');
   };
-  const response = await worker.default.fetch(
-    new Request('https://example.com/api/mfc/image?url=' + encodeURIComponent('https://evil.example/image.jpg')),
-    {},
-    {},
-  );
-  assert.equal(response.status, 400);
+  for (const invalidUrl of [
+    'https://evil.example/image.jpg',
+    'https://static.myfigurecollection.net:8443/upload/items/2/rem.jpg',
+  ]) {
+    const response = await worker.default.fetch(
+      new Request('https://example.com/api/mfc/image?url=' + encodeURIComponent(invalidUrl)),
+      {},
+      {},
+    );
+    assert.equal(response.status, 400);
+  }
 }
 
 globalThis.fetch = originalFetch;

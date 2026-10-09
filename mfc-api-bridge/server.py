@@ -53,6 +53,7 @@ def safe_image_url(value: str):
             or parsed.hostname != IMAGE_URL_HOST
             or parsed.username
             or parsed.password
+            or parsed.port not in (None, 443)
             or not IMAGE_PATH.match(parsed.path)
         ):
             return None

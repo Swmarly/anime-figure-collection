@@ -1108,6 +1108,7 @@ const getAllowedMfcImageUrl = (value) => {
       url.hostname.toLowerCase() !== "static.myfigurecollection.net" ||
       url.username ||
       url.password ||
+      url.port !== "" ||
       !/^\/upload\/(?:items|pictures)\//i.test(url.pathname)
     ) return null;
     url.hash = "";
@@ -1415,6 +1416,11 @@ const extractReleaseDateCandidates = (value) => {
     for (const match of cleaned.matchAll(monthRegex)) {
       const monthKey = match[1].toLowerCase().replace(/\./g, "").slice(0, 3);
       const candidate = normalizeDateCandidate(match[2], monthNames[monthKey]);
+      if (candidate) candidates.push(candidate);
+    }
+
+    for (const match of cleaned.matchAll(/(?:^|[^\d/-])(\d{1,2})[-/](\d{4})(?![-/]\d)/g)) {
+      const candidate = normalizeDateCandidate(match[2], match[1]);
       if (candidate) candidates.push(candidate);
     }
 
