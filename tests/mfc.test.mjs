@@ -293,5 +293,21 @@ try {
   }
 }
 
+// A failed direct fallback returns a useful API error instead of an uncaught Worker exception.
+{
+  globalThis.fetch = async () => {
+    throw new Error('simulated network failure');
+  };
+  const authHeader = 'Basic ' + Buffer.from('admin:figureadmin').toString('base64');
+  const response = await worker.default.fetch(
+    new Request('https://example.com/api/mfc?item=1685257', { headers: { Authorization: authHeader } }),
+    {},
+    {},
+  );
+  assert.equal(response.status, 503);
+  const payload = await response.json();
+  assert.match(payload.error, /request failed/i);
+}
+
 globalThis.fetch = originalFetch;
 console.log('MFC bridge and image proxy tests passed');
