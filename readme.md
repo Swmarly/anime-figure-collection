@@ -203,7 +203,7 @@ MFC_API_URL=http://127.0.0.1:8765
 MFC_API_TOKEN=<same long random token>
 ```
 
-The token is sent only from the Worker to the bridge; it is never returned to browser code. If `MFC_API_URL` is not set, the Worker keeps a best-effort direct MFC fetch fallback, which may still be blocked.
+The token is sent only from the Worker to the bridge; it is never returned to browser code. The bridge is required for item imports and reliable MFC image delivery. Without it, those requests return an actionable setup error rather than attempting a direct Cloudflare-to-MFC request.
 
 This repository's `wrangler.toml` deploys a Worker with static assets. If the project is deployed as Cloudflare Pages, Pages must run the `_worker.js` advanced-mode handler (or equivalent Functions); a static-only Pages deployment will not execute the `/api/*` routes.
 
