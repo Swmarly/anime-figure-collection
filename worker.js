@@ -1701,18 +1701,27 @@ const fetchMfcDetails = async (itemId, env) => {
   }
 
   const url = `https://myfigurecollection.net/item/${itemId}`;
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-    cf: {
-      cacheTtl: 3600,
-      cacheEverything: false,
-    },
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      cf: {
+        cacheTtl: 3600,
+        cacheEverything: false,
+      },
+    });
+  } catch (error) {
+    return {
+      error: "MyFigureCollection request failed: " +
+        (error instanceof Error ? error.message : "network error"),
+      status: 503,
+    };
+  }
 
   if (!response.ok) {
     return {
