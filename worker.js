@@ -694,221 +694,6 @@ const ensureAuthorized = async (request, env, { redirectToLogin = false } = {}) 
   return buildUnauthorizedResponse(request, { clearSession: hadSessionCookie });
 };
 
-const decodeHtml = (value) =>
-  value
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const extractMeta = (html, attribute, name) => {
-  const regex = new RegExp(
-    `<meta[^>]+${attribute}="${name}"[^>]+content="([^"]*)"[^>]*>`,
-    "i",
-  );
-  const match = regex.exec(html);
-  return match ? decodeHtml(match[1]) : null;
-};
-
-const stripRoleSuffix = (value) => {
-  if (!value) return value;
-  const patterns = [
-    /\s+(?:as|[-–])\s+(?:manufacturer|company|producer|brand)\b.*$/i,
-    /\s+(?:as|[-–])\s+(?:product\s*line|line)\b.*$/i,
-    /\s+(?:as|[-–])\s+(?:scale|classification|ratio)\b.*$/i,
-    /\s+(?:as|[-–])\s+(?:release\s*date|release)\b.*$/i,
-    /\s+(?:as|[-–])\s+(?:series|origin|source|franchise)\b.*$/i,
-    /\s+(?:as|[-–])\s+(?:character)\b.*$/i,
-  ];
-
-  for (const pattern of patterns) {
-    if (pattern.test(value)) {
-      return value.replace(pattern, "").trim();
-    }
-  }
-
-  return value;
-};
-
-const cleanFieldValue = (value) => {
-  if (!value) return null;
-  const trimmed = value.replace(/\s+/g, " ").trim();
-  if (!trimmed) return null;
-  const normalized = trimmed.toLowerCase();
-  if (normalized === "-" || normalized === "n/a" || normalized === "?" || normalized === "unknown") {
-    return null;
-  }
-  return stripRoleSuffix(trimmed);
-};
-
-const normalizeLabel = (value) =>
-  value
-    ? value
-        .toLowerCase()
-        .replace(/&nbsp;/g, " ")
-        .replace(/[:：]+$/g, "")
-        .replace(/[^a-z0-9/ ]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-    : "";
-
-const fieldLabelMatches = (rawHeading, labels) => {
-  const heading = cleanFieldValue(decodeHtml(rawHeading));
-  if (!heading) return false;
-  const headingNormalized = normalizeLabel(heading);
-  const headingParts = headingNormalized.split("/").map((part) => part.trim()).filter(Boolean);
-  return labels.some(
-    (label) =>
-      headingNormalized === label ||
-      headingNormalized === `${label} date` ||
-      headingNormalized.startsWith(`${label} `) ||
-      headingParts.some((part) => part === label || part === `${label} date`),
-  );
-};
-
-
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const extractTextFieldValues = (html, labels) => {
-  const text = decodeHtml(html);
-  if (!text) return [];
-
-  const knownLabels = [
-    "origin",
-    "source",
-    "series",
-    "origin of character",
-    "character",
-    "manufacturer",
-    "company",
-    "producer",
-    "scale",
-    "classification",
-    "ratio",
-    "size",
-    "release",
-    "released",
-    "release date",
-    "original release",
-    "re-release",
-  ];
-  const boundary = knownLabels.map(escapeRegex).join("|");
-  const values = [];
-
-  for (const label of labels) {
-    const pattern = new RegExp(
-      `(?:^|\\s)${escapeRegex(label)}(?:\\s*/\\s*(?:${boundary}))*\\s*[:：]\\s*([\\s\\S]*?)(?=\\s+(?:${boundary})(?:\\s*/\\s*(?:${boundary}))*\\s*[:：]|$)`,
-      "gi",
-    );
-    let match;
-    while ((match = pattern.exec(text))) {
-      const value = cleanFieldValue(match[1]);
-      if (value) values.push(value);
-    }
-  }
-
-  return values;
-};
-
-const extractFieldValues = (html, ...labels) => {
-  if (!html) return [];
-  const normalizedLabels = labels
-    .filter(Boolean)
-    .map((label) => normalizeLabel(label))
-    .filter(Boolean);
-
-  if (!normalizedLabels.length) return [];
-
-  const extractValue = (rawValue) => cleanFieldValue(decodeHtml(rawValue));
-  const values = [];
-  const addValue = (rawHeading, rawValue) => {
-    if (!fieldLabelMatches(rawHeading, normalizedLabels)) return;
-    const value = extractValue(rawValue);
-    if (value) values.push(value);
-  };
-
-  const patterns = [
-    /<tr[^>]*>\s*<th[^>]*>([\s\S]*?)<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
-    /<tr[^>]*>\s*<td[^>]*class=["'][^"']*(?:label|field|key)[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi,
-    /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi,
-    /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|header|title|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:div|span|li)[^>]*class=["'][^"']*(?:value|content|data|field-value|item-value)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>/gi,
-    /<(?:div|span|li)[^>]*class=["'][^"']*(?:label|field-name|field-label|item-label)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|li)>\s*<(?:a|span|div)[^>]*>([\s\S]*?)<\/(?:a|span|div)>/gi,
-    /<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>\s*<(?:a|span|div|time)[^>]*>([\s\S]*?)<\/(?:a|span|div|time)>/gi,
-    /<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>\s*([^<]{1,240})/gi,
-  ];
-
-  for (const regex of patterns) {
-    let match;
-    while ((match = regex.exec(html))) {
-      addValue(match[1], match[2]);
-    }
-  }
-
-  values.push(...extractTextFieldValues(html, normalizedLabels));
-
-  return Array.from(new Set(values));
-};
-
-const extractField = (html, ...labels) => extractFieldValues(html, ...labels)[0] ?? null;
-
-const normalizeScaleValue = (value) => {
-  const cleaned = cleanFieldValue(value);
-  if (!cleaned) return null;
-
-  const scaleMatch = cleaned.replace(/\s+/g, "").match(/\b1\/(?:\d+(?:\.\d+)?)\b/);
-  return scaleMatch ? scaleMatch[0] : cleaned;
-};
-
-const extractMfcScaleValues = (html) => {
-  if (!html) return [];
-  const values = [];
-  const anchorRegex = /<a\b(?=[^>]*(?:class=["'][^"']*item-scale[^"']*["']|title=["']Scale["']))[^>]*>([\s\S]*?)<\/a>/gi;
-  let match;
-
-  while ((match = anchorRegex.exec(html))) {
-    const value = normalizeScaleValue(decodeHtml(match[1]));
-    if (value) values.push(value);
-  }
-
-  const scaleParamRegex = /[?&amp;]scale=(\d+(?:\.\d+)?)/gi;
-  while ((match = scaleParamRegex.exec(html))) {
-    values.push(`1/${match[1]}`);
-  }
-
-  return Array.from(new Set(values));
-};
-
-const extractMfcCalendarReleaseValues = (html) => {
-  if (!html) return [];
-  const values = [];
-  const anchorRegex = /<a\b([^>]*(?:class=["'][^"']*\btime\b[^"']*["'][^>]*|tab=calendar[^>]*))>([\s\S]*?)<\/a>/gi;
-  let match;
-
-  while ((match = anchorRegex.exec(html))) {
-    const tag = decodeJsonHtmlEntities(match[1]);
-    const yearMatch = /[?&]year=(\d{4})\b/i.exec(tag);
-    const monthMatch = /[?&]month=(\d{1,2})\b/i.exec(tag);
-    if (yearMatch) {
-      const candidate = normalizeDateCandidate(yearMatch[1], monthMatch?.[1] ?? null);
-      if (candidate) values.push(candidate);
-      continue;
-    }
-
-    const text = decodeHtml(match[2]);
-    values.push(...extractReleaseDateCandidates(text));
-  }
-
-  return Array.from(new Set(values));
-};
-
-
 const decodeJsonHtmlEntities = (value) =>
   value
     .replace(/&quot;/g, '"')
@@ -918,184 +703,13 @@ const decodeJsonHtmlEntities = (value) =>
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/\u0026/g, "&");
-
-const parseJsonLd = (html) => {
-  const results = [];
-  const scriptRegex =
-    /<script[^>]+type\s*=\s*"application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
-  let match;
-  while ((match = scriptRegex.exec(html))) {
-    const raw = match[1] ? decodeJsonHtmlEntities(match[1].trim()) : "";
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((item) => results.push(item));
-      } else {
-        results.push(parsed);
-      }
-    } catch (error) {
-      console.warn("Unable to parse JSON-LD block", error);
-    }
-  }
-  return results;
-};
-
-const pickFirstString = (value) => {
-  if (!value) return null;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const picked = pickFirstString(item);
-      if (picked) return picked;
-    }
-    return null;
-  }
-  if (typeof value === "object") {
-    if (typeof value.name === "string") {
-      const cleaned = stripRoleSuffix(value.name.trim());
-      return cleaned || null;
-    }
-    return null;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    const cleaned = stripRoleSuffix(trimmed);
-    return cleaned || null;
-  }
-  return null;
-};
-
-const flattenToStrings = (value) => {
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => flattenToStrings(item));
-  }
-  if (typeof value === "object") {
-    if (typeof value.name === "string") {
-      const cleaned = stripRoleSuffix(value.name.trim());
-      return cleaned ? [cleaned] : [];
-    }
-    return [];
-  }
-  if (typeof value === "string") {
-    const cleaned = stripRoleSuffix(value.trim());
-    return cleaned ? [cleaned] : [];
-  }
-  return [];
-};
+    .replace(/\\u0026/g, "&");
 
 const normalizeMfcImageUrl = (value) => {
   if (!value || typeof value !== "string") return null;
   const decoded = decodeJsonHtmlEntities(value).trim();
   if (!decoded || decoded.startsWith("data:")) return null;
-  return decoded.startsWith("//") ? `https:${decoded}` : decoded;
-};
-
-const isMfcHostname = (hostname) => {
-  const normalized = hostname.toLowerCase();
-  return normalized === "myfigurecollection.net" || normalized.endsWith(".myfigurecollection.net");
-};
-
-const parseMfcUploadImage = (value) => {
-  const normalized = normalizeMfcImageUrl(value);
-  if (!normalized) return null;
-
-  try {
-    const url = new URL(normalized);
-    if (!isMfcHostname(url.hostname)) {
-      return null;
-    }
-
-    const itemMatch = url.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
-    if (itemMatch) {
-      return {
-        size: Number(itemMatch[1]),
-        imageKey: `item:${itemMatch[2]}`,
-      };
-    }
-
-    const pictureMatch = url.pathname.match(/\/upload\/pictures\/(.+)$/i);
-    if (pictureMatch) {
-      return {
-        size: null,
-        imageKey: `picture:${pictureMatch[1].replace(/\/thumbnails\//i, "/")}`,
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const buildFullSizeMfcImageUrl = (value) => {
-  const normalized = normalizeMfcImageUrl(value);
-  if (!normalized) return null;
-
-  try {
-    const url = new URL(normalized);
-    const host = url.hostname.toLowerCase();
-    if (!isMfcHostname(host)) {
-      return normalized;
-    }
-
-    url.protocol = "https:";
-    url.pathname = url.pathname
-      .replace(/\/upload\/items\/\d+\/([^/]+)$/i, "/upload/items/2/$1")
-      .replace(/\/upload\/pictures\/(.+?)\/thumbnails\/([^/]+)$/i, "/upload/pictures/$1/$2")
-      .replace(
-        /\/pics\/(figure|picture)\/(?:tiny|thumb|thumbnail|small|regular|medium|large|big)\/([^/]+)$/i,
-        "/pics/$1/big/$2",
-      )
-      .replace(/\/pics\/(figure|picture)\/([^/]+)$/i, "/pics/$1/big/$2");
-    url.search = "";
-    return url.toString();
-  } catch {
-    return normalized;
-  }
-};
-
-
-const canonicalizeMfcImageUrl = (value) => {
-  const normalized = normalizeMfcImageUrl(value);
-  if (!normalized) return null;
-
-  try {
-    const url = new URL(normalized);
-    if (isMfcHostname(url.hostname)) {
-      url.protocol = "https:";
-      url.search = "";
-      return url.toString();
-    }
-    return normalized;
-  } catch {
-    return normalized;
-  }
-};
-
-const shouldVerifyMfcImageUpgrade = (original, upgraded) => {
-  if (!original || !upgraded || original === upgraded) return false;
-
-  try {
-    const originalUrl = new URL(original);
-    const upgradedUrl = new URL(upgraded);
-    if (originalUrl.hostname.toLowerCase() !== upgradedUrl.hostname.toLowerCase()) return false;
-
-    const originalMatch = originalUrl.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
-    const upgradedMatch = upgradedUrl.pathname.match(/\/upload\/items\/(\d+)\/([^/]+)$/i);
-    return Boolean(originalMatch && upgradedMatch && originalMatch[1] !== "2" && upgradedMatch[1] === "2");
-  } catch {
-    return false;
-  }
-};
-
-const mfcImageRequestHeaders = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-  Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-  Referer: "https://myfigurecollection.net/",
+  return decoded.startsWith("//") ? "https:" + decoded : decoded;
 };
 
 const getAllowedMfcImageUrl = (value) => {
@@ -1138,222 +752,6 @@ const getMfcApiConfig = (env = {}) => {
   }
 };
 
-const isImageResponse = (response) => {
-  if (!response.ok) return false;
-  const contentType = response.headers.get("Content-Type") || "";
-  return !contentType || contentType.toLowerCase().startsWith("image/");
-};
-
-const mfcImageExists = async (url) => {
-  try {
-    const headResponse = await fetch(url, {
-      method: "HEAD",
-      headers: mfcImageRequestHeaders,
-      cf: { cacheTtl: 3600, cacheEverything: false },
-    });
-    if (isImageResponse(headResponse)) return true;
-    if (headResponse.status !== 405 && headResponse.status !== 403) return false;
-  } catch (error) {
-    console.warn("Unable to verify MFC image with HEAD", error);
-  }
-
-  try {
-    const getResponse = await fetch(url, {
-      headers: { ...mfcImageRequestHeaders, Range: "bytes=0-0" },
-      cf: { cacheTtl: 3600, cacheEverything: false },
-    });
-    return isImageResponse(getResponse);
-  } catch (error) {
-    console.warn("Unable to verify MFC image with GET", error);
-    return false;
-  }
-};
-
-const resolveFullSizeMfcImageUrl = async (value) => {
-  const original = canonicalizeMfcImageUrl(value);
-  const upgraded = buildFullSizeMfcImageUrl(value);
-  if (!upgraded) return null;
-  if (!shouldVerifyMfcImageUpgrade(original, upgraded)) return upgraded;
-
-  return (await mfcImageExists(upgraded)) ? upgraded : original;
-};
-
-const extractElementsByClassNames = (html, tagName, classNames) => {
-  const sections = [];
-  const tagRegex = new RegExp(`<${tagName}\\b[^>]*>`, "gi");
-  let match;
-
-  while ((match = tagRegex.exec(html))) {
-    const tag = match[0];
-    const classMatch = /class\s*=\s*(["'])([^"']*)\1/i.exec(tag);
-    const classes = classMatch ? classMatch[2].split(/\s+/).filter(Boolean) : [];
-    if (!classNames.every((className) => classes.includes(className))) {
-      continue;
-    }
-
-    const sectionStart = match.index;
-    let cursor = tagRegex.lastIndex;
-    let depth = 1;
-    const boundaryRegex = new RegExp(`</?${tagName}\\b[^>]*>`, "gi");
-    boundaryRegex.lastIndex = cursor;
-
-    let boundary;
-    while ((boundary = boundaryRegex.exec(html))) {
-      if (boundary[0].startsWith(`</${tagName}`)) {
-        depth -= 1;
-        if (depth === 0) {
-          sections.push(html.slice(sectionStart, boundaryRegex.lastIndex));
-          cursor = boundaryRegex.lastIndex;
-          break;
-        }
-      } else {
-        depth += 1;
-      }
-    }
-
-    tagRegex.lastIndex = cursor;
-  }
-
-  return sections;
-};
-
-const decodeAttributeValue = (value) => {
-  if (!value) return "";
-  const decoded = decodeHtml(value);
-  try {
-    return decodeURIComponent(decoded);
-  } catch {
-    return decoded;
-  }
-};
-
-const extractMfcPictureGalleryImages = (html) => {
-  const candidates = [];
-  const metaRegex = /<meta[^>]+name\s*=\s*(["'])pictures\1[^>]+content\s*=\s*(["'])([\s\S]*?)\2[^>]*>/gi;
-  let match;
-
-  while ((match = metaRegex.exec(html))) {
-    const decoded = decodeAttributeValue(match[3]);
-    if (!decoded) continue;
-
-    try {
-      const parsed = JSON.parse(decoded);
-      candidates.push(...collectImageCandidateRecords(parsed));
-    } catch (error) {
-      console.warn("Unable to parse MFC picture gallery metadata", error);
-    }
-  }
-
-  return candidates;
-};
-
-const extractScopedMfcImageCandidates = (html) => {
-  const sections = extractElementsByClassNames(html, "div", ["split-left", "righter"]);
-  return sections.flatMap((section) => {
-    const galleryImages = extractMfcPictureGalleryImages(section);
-    return galleryImages.length ? galleryImages : extractImageUrlsFromHtml(section);
-  });
-};
-
-const normalizeImageDimension = (value) => {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : null;
-};
-
-const collectImageCandidateRecords = (value, inheritedDimensions = {}) => {
-  if (!value) return [];
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => collectImageCandidateRecords(item, inheritedDimensions));
-  }
-  if (typeof value === "object") {
-    const dimensions = {
-      width: normalizeImageDimension(value.width ?? value.w) ?? inheritedDimensions.width ?? null,
-      height: normalizeImageDimension(value.height ?? value.h) ?? inheritedDimensions.height ?? null,
-    };
-
-    return [
-      ...collectImageCandidateRecords(value.src, dimensions),
-      ...collectImageCandidateRecords(value.url, dimensions),
-      ...collectImageCandidateRecords(value.contentUrl, dimensions),
-      ...collectImageCandidateRecords(value.thumbnailUrl, dimensions),
-      ...collectImageCandidateRecords(value.image, dimensions),
-    ];
-  }
-  if (typeof value === "string") {
-    const normalized = normalizeMfcImageUrl(value);
-    return normalized
-      ? [
-          {
-            url: normalized,
-            width: inheritedDimensions.width ?? null,
-            height: inheritedDimensions.height ?? null,
-          },
-        ]
-      : [];
-  }
-  return [];
-};
-
-const collectImageCandidates = (value) =>
-  collectImageCandidateRecords(value).map((candidate) => candidate.url);
-
-const extractImageUrlsFromHtml = (html) => {
-  const urls = [];
-  const attributeRegex =
-    /(?:src|data-src|data-original|data-large|data-full|href|content)\s*=\s*(["'])([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)\1/gi;
-  let match;
-  while ((match = attributeRegex.exec(html))) {
-    const normalized = normalizeMfcImageUrl(match[2]);
-    if (normalized) urls.push(normalized);
-  }
-  return urls;
-};
-
-const normalizeImageCandidateRecords = (value) => {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => normalizeImageCandidateRecords(item));
-  }
-  if (value && typeof value === "object" && typeof value.url === "string") {
-    return [value];
-  }
-  return collectImageCandidateRecords(value);
-};
-
-const pickMfcImages = async (...candidateGroups) => {
-  const candidates = candidateGroups.flatMap((group) => normalizeImageCandidateRecords(group));
-  const seenUrls = new Set();
-  const seenImageKeys = new Set();
-  const images = [];
-
-  for (const candidate of candidates) {
-    const fullSize = await resolveFullSizeMfcImageUrl(candidate.url);
-    if (!fullSize || seenUrls.has(fullSize)) continue;
-
-    const uploadImage = parseMfcUploadImage(fullSize);
-    const imageKey = uploadImage?.imageKey || fullSize;
-    if (seenImageKeys.has(imageKey)) continue;
-
-    seenUrls.add(fullSize);
-    seenImageKeys.add(imageKey);
-    images.push(fullSize);
-  }
-
-  return images;
-};
-
-
-const parseKeywords = (...values) => {
-  const raw = values.flatMap((value) => flattenToStrings(value));
-  return Array.from(
-    new Set(
-      raw
-        .flatMap((item) => String(item).split(/[,;\n]/))
-        .map((item) => stripRoleSuffix(item.trim()))
-        .filter(Boolean),
-    ),
-  );
-};
-
 const flattenReleaseValues = (value) => {
   if (value === null || value === undefined) return [];
   if (Array.isArray(value)) return value.flatMap((item) => flattenReleaseValues(item));
@@ -1363,10 +761,11 @@ const flattenReleaseValues = (value) => {
       ...flattenReleaseValues(value.productionDate),
       ...flattenReleaseValues(value.datePublished),
       ...flattenReleaseValues(value.availabilityStarts),
+      ...flattenReleaseValues(value.date),
     ];
   }
   if (typeof value === "string") {
-    const cleaned = cleanFieldValue(value);
+    const cleaned = value.trim();
     return cleaned ? [cleaned] : [];
   }
   return [];
@@ -1375,57 +774,41 @@ const flattenReleaseValues = (value) => {
 const normalizeDateCandidate = (year, month = null) => {
   const normalizedYear = Number(year);
   if (!Number.isInteger(normalizedYear) || normalizedYear < 1900 || normalizedYear > 2200) return null;
-
   if (month === null || month === undefined || month === "") return String(normalizedYear);
   const normalizedMonth = Number(month);
   if (!Number.isInteger(normalizedMonth) || normalizedMonth < 1 || normalizedMonth > 12) return String(normalizedYear);
-  return `${normalizedYear}-${String(normalizedMonth).padStart(2, "0")}`;
+  return normalizedYear + "-" + String(normalizedMonth).padStart(2, "0");
 };
 
 const extractReleaseDateCandidates = (value) => {
   const monthNames = {
-    jan: "01",
-    feb: "02",
-    mar: "03",
-    apr: "04",
-    may: "05",
-    jun: "06",
-    jul: "07",
-    aug: "08",
-    sep: "09",
-    oct: "10",
-    nov: "11",
-    dec: "12",
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
   };
   const candidates = [];
 
   for (const rawValue of flattenReleaseValues(value)) {
     const cleaned = rawValue.replace(/\b(?:released?|release date|original release|re-release|rerelease)\b/gi, " ");
-
     for (const match of cleaned.matchAll(/\b(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?\b/g)) {
       const candidate = normalizeDateCandidate(match[1], match[2]);
       if (candidate) candidates.push(candidate);
     }
-
     for (const match of cleaned.matchAll(/\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g)) {
       const candidate = normalizeDateCandidate(match[3], Number(match[1]) > 12 ? match[2] : match[1]);
       if (candidate) candidates.push(candidate);
     }
-
     const monthRegex = /\b(jan(?:uary)?\.?|feb(?:ruary)?\.?|mar(?:ch)?\.?|apr(?:il)?\.?|may\.?|jun(?:e)?\.?|jul(?:y)?\.?|aug(?:ust)?\.?|sep(?:tember)?\.?|oct(?:ober)?\.?|nov(?:ember)?\.?|dec(?:ember)?\.?)\s+(?:\d{1,2},?\s+)?(\d{4})\b/gi;
     for (const match of cleaned.matchAll(monthRegex)) {
       const monthKey = match[1].toLowerCase().replace(/\./g, "").slice(0, 3);
       const candidate = normalizeDateCandidate(match[2], monthNames[monthKey]);
       if (candidate) candidates.push(candidate);
     }
-
     for (const match of cleaned.matchAll(/(?:^|[^\d/-])(\d{1,2})[-/](\d{4})(?![-/]\d)/g)) {
       const candidate = normalizeDateCandidate(match[2], match[1]);
       if (candidate) candidates.push(candidate);
     }
-
     for (const match of cleaned.matchAll(/\b(\d{4})\b/g)) {
-      const alreadyCapturedWithMonth = candidates.some((candidate) => candidate.startsWith(`${match[1]}-`));
+      const alreadyCapturedWithMonth = candidates.some((candidate) => candidate.startsWith(match[1] + "-"));
       if (!alreadyCapturedWithMonth) {
         const candidate = normalizeDateCandidate(match[1]);
         if (candidate) candidates.push(candidate);
@@ -1448,152 +831,11 @@ const pickOldestReleaseDate = (...values) => {
   return candidates.sort((a, b) => releaseSortValue(a) - releaseSortValue(b))[0];
 };
 
-const normalizeJsonDate = (value) => pickOldestReleaseDate(value);
-
-const parseDescriptionFields = (description) => {
-  if (!description) return {};
-  const knownDescriptionKeys =
-    "origin|series|source|franchise|manufacturer|company|producer|brand|scale|classification|ratio|release|released|release date|original release";
-  const entries = description
-    .split(
-      new RegExp(
-        String.raw`\s*(?:[•|;\n]|[-–](?=\s*(?:${knownDescriptionKeys})\s*:)|,(?=\s*(?:(?:${knownDescriptionKeys})\s*:|[^,]+?\s+(?:as|[-–])\s+)))\s*`,
-        "i",
-      ),
-    )
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const mapping = {};
-  for (const entry of entries) {
-    const parts = entry.split(/:\s*/);
-    const roleMatch = !entry.includes(":") ? /^(.+?)\s+(?:as|[-–])\s+(.+)$/i.exec(entry) : null;
-    const key = roleMatch ? normalizeLabel(roleMatch[2]) : normalizeLabel(parts[0]);
-    const value = roleMatch ? cleanFieldValue(roleMatch[1]) : cleanFieldValue(parts.slice(1).join(": "));
-    if (!key || !value) continue;
-    mapping[key] = value;
-  }
-  const series = mapping["origin"] || mapping["series"] || mapping["source"] || mapping["franchise"] || null;
-  const manufacturer = mapping["manufacturer"] || mapping["company"] || mapping["producer"] || mapping["brand"] || null;
-  const scale = mapping["scale"] || mapping["classification"] || mapping["ratio"] || null;
-  const releaseDate = pickOldestReleaseDate(
-    mapping["release"],
-    mapping["release date"],
-    mapping["released"],
-    mapping["original release"],
-  );
-  return { series, manufacturer, scale, releaseDate };
-};
-
-function normalizeReleaseDate(value) {
-  return pickOldestReleaseDate(value) || cleanFieldValue(value);
-}
-
 const summarizeText = (value) => {
   if (!value) return null;
   const text = value.trim();
   const sentence = text.split(/(?<=[.!?])\s+/)[0] || text;
-  return sentence.length > 160 ? `${sentence.slice(0, 157)}…` : sentence;
-};
-
-const isCloudflareChallenge = (html) => {
-  if (!html) return false;
-  const lower = html.toLowerCase();
-  if (lower.includes("just a moment") && lower.includes("cloudflare")) return true;
-  if (lower.includes("cf-error-1020") || lower.includes("cf-chl-jschl")) return true;
-  if (lower.includes("attention required")) return true;
-  return false;
-};
-
-const parseMfcHtml = async (html) => {
-  const metaName = extractMeta(html, "property", "og:title");
-  const metaImage = extractMeta(html, "property", "og:image");
-  const metaDescription = extractMeta(html, "property", "og:description");
-  const metaKeywords = extractMeta(html, "name", "keywords");
-
-  const jsonLdEntries = parseJsonLd(html);
-  const productEntry = jsonLdEntries.find((entry) => {
-    const type = entry?.["@type"];
-    if (!type) return false;
-    if (typeof type === "string") {
-      return type.toLowerCase() === "product";
-    }
-    if (Array.isArray(type)) {
-      return type.some(
-        (item) => typeof item === "string" && item.toLowerCase() === "product",
-      );
-    }
-    return false;
-  });
-
-  const productName = pickFirstString(productEntry?.name);
-  const productImageCandidates = collectImageCandidates(productEntry?.image);
-  const productDescription = pickFirstString(productEntry?.description);
-  const productKeywords = productEntry?.keywords;
-  const productSeries =
-    pickFirstString(productEntry?.isRelatedTo) ||
-    pickFirstString(productEntry?.category) ||
-    pickFirstString(productEntry?.genre) ||
-    null;
-  const productManufacturer =
-    pickFirstString(productEntry?.brand) ||
-    pickFirstString(productEntry?.manufacturer) ||
-    null;
-  const productScale = pickFirstString(productEntry?.scale) || pickFirstString(productEntry?.size) || null;
-  const productRelease = pickOldestReleaseDate(
-    productEntry?.releaseDate,
-    productEntry?.productionDate,
-    productEntry?.offers,
-  );
-
-  const htmlSeries =
-    extractField(html, "Origin", "Source", "Series", "Origin of Character") ||
-    extractField(html, "Character") ||
-    null;
-  const htmlManufacturer = extractField(html, "Manufacturer", "Company", "Producer");
-  const htmlScale =
-    extractMfcScaleValues(html)[0] || extractField(html, "Scale", "Classification", "Ratio", "Size");
-  const htmlRelease = pickOldestReleaseDate(
-    extractMfcCalendarReleaseValues(html),
-    extractFieldValues(
-      html,
-      "Release",
-      "Released",
-      "Release Date",
-      "Release date",
-      "Original release",
-      "Re-release",
-    ),
-  );
-
-  const descriptionFields = parseDescriptionFields(productDescription || metaDescription || "");
-
-  const combinedDescription = productDescription || metaDescription || null;
-  const combinedName = productName || metaName || null;
-  const scopedImageCandidates = extractScopedMfcImageCandidates(html);
-  const fallbackImageCandidates = [metaImage, productImageCandidates];
-  const imageCandidates = scopedImageCandidates.length ? scopedImageCandidates : fallbackImageCandidates;
-  const combinedImages = imageCandidates.length ? await pickMfcImages(imageCandidates) : [];
-  const combinedImage = combinedImages[0] ?? null;
-  const combinedSeries = htmlSeries || productSeries || descriptionFields.series || null;
-  const combinedManufacturer =
-    htmlManufacturer || productManufacturer || descriptionFields.manufacturer || null;
-  const combinedScale = htmlScale || productScale || descriptionFields.scale || null;
-  const combinedRelease = htmlRelease || productRelease || descriptionFields.releaseDate || null;
-
-  const tags = parseKeywords(metaKeywords, productKeywords, productEntry?.category);
-
-  return {
-    name: combinedName,
-    image: combinedImage,
-    images: combinedImages,
-    description: combinedDescription,
-    caption: summarizeText(combinedDescription),
-    series: combinedSeries,
-    manufacturer: combinedManufacturer,
-    scale: combinedScale,
-    releaseDate: combinedRelease,
-    tags,
-  };
+  return sentence.length > 160 ? sentence.slice(0, 157) + "…" : sentence;
 };
 
 const fetchMfcApiDetails = async (itemId, env, config) => {
@@ -1695,70 +937,14 @@ const fetchMfcApiDetails = async (itemId, env, config) => {
 
 const fetchMfcDetails = async (itemId, env) => {
   const apiConfig = getMfcApiConfig(env);
-  if (apiConfig.configured) {
-    if (apiConfig.error) return { error: apiConfig.error, status: 503 };
-    return fetchMfcApiDetails(itemId, env, apiConfig);
-  }
-
-  const url = `https://myfigurecollection.net/item/${itemId}`;
-  let response;
-  try {
-    response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-      cf: {
-        cacheTtl: 3600,
-        cacheEverything: false,
-      },
-    });
-  } catch (error) {
+  if (!apiConfig.configured) {
     return {
-      error: "MyFigureCollection request failed: " +
-        (error instanceof Error ? error.message : "network error"),
+      error: "MFC_API_URL is not configured. Set up the authenticated myfigurecollection-api bridge to import items.",
       status: 503,
     };
   }
-
-  if (!response.ok) {
-    return {
-      error: `MyFigureCollection responded with status ${response.status}`,
-      status: response.status === 404 ? 404 : 502,
-    };
-  }
-
-  const html = await response.text();
-  if (isCloudflareChallenge(html)) {
-    return {
-      error:
-        "MyFigureCollection returned a protection page. Please try again in a few moments or complete the request manually.",
-      status: 503,
-    };
-  }
-
-  const parsed = await parseMfcHtml(html);
-  if (
-    !parsed ||
-    Object.values(parsed).every(
-      (value) =>
-        value === null ||
-        value === undefined ||
-        value === "" ||
-        (Array.isArray(value) && value.length === 0),
-    )
-  ) {
-    return {
-      error: "Unable to parse MyFigureCollection details from the response.",
-      status: 502,
-    };
-  }
-
-  return {
-    data: { ...parsed, links: { mfc: url } },
-  };
+  if (apiConfig.error) return { error: apiConfig.error, status: 503 };
+  return fetchMfcApiDetails(itemId, env, apiConfig);
 };
 
 const handleMfcRequest = async (request, env) => {
@@ -1823,38 +1009,33 @@ const handleMfcImageRequest = async (request, env, ctx) => {
     }
   }
 
-  let upstream;
   const apiConfig = getMfcApiConfig(env);
-  if (apiConfig.configured) {
-    if (apiConfig.error || !env.MFC_API_TOKEN) {
-      return new Response(apiConfig.error || "MFC_API_TOKEN is not configured.", {
-        status: 503,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
-    }
-    const bridgeUrl = new URL("/api/image", apiConfig.baseUrl);
-    bridgeUrl.searchParams.set("url", imageUrl.toString());
-    try {
-      upstream = await fetch(bridgeUrl.toString(), {
-        headers: {
-          Accept: "image/*",
-          Authorization: "Bearer " + env.MFC_API_TOKEN,
-        },
-        cf: { cacheTtl: 86400, cacheEverything: true },
-      });
-    } catch {
-      return new Response("The MFC image bridge is unavailable.", { status: 503 });
-    }
-  } else {
-    try {
-      upstream = await fetch(imageUrl.toString(), {
-        headers: mfcImageRequestHeaders,
-        redirect: "manual",
-        cf: { cacheTtl: 86400, cacheEverything: true },
-      });
-    } catch {
-      return new Response("MyFigureCollection image could not be fetched.", { status: 502 });
-    }
+  if (!apiConfig.configured) {
+    return new Response("MFC_API_URL is not configured for reliable image delivery.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+  if (apiConfig.error || !env.MFC_API_TOKEN) {
+    return new Response(apiConfig.error || "MFC_API_TOKEN is not configured.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  const bridgeUrl = new URL("/api/image", apiConfig.baseUrl);
+  bridgeUrl.searchParams.set("url", imageUrl.toString());
+  let upstream;
+  try {
+    upstream = await fetch(bridgeUrl.toString(), {
+      headers: {
+        Accept: "image/*",
+        Authorization: "Bearer " + env.MFC_API_TOKEN,
+      },
+      cf: { cacheTtl: 86400, cacheEverything: true },
+    });
+  } catch {
+    return new Response("The MFC image bridge is unavailable.", { status: 503 });
   }
 
   const contentType = upstream.headers.get("Content-Type") || "";
