@@ -5,7 +5,7 @@ Anime Figure Collection is a personal figure shelf site with two parts:
 - a polished public React gallery for browsing owned figures and wishlist entries; and
 - a private Cloudflare Worker admin panel for editing the collection data without redeploying the site.
 
-The public app reads the current collection from `/api/collection`. The admin app writes the same JSON record back to Cloudflare KV, can import metadata from MyFigureCollection, and can refresh stale MFC image URLs when thumbnails move.
+The public app reads the current collection from `/api/collection`. The admin app writes the same JSON record back to Cloudflare KV and imports MFC item data through the linked `myfigurecollection-api` Python package. MFC upload images are displayed through a same-origin image route, so browsers do not hotlink them directly.
 
 ## What it does
 
@@ -22,14 +22,14 @@ The public app reads the current collection from `/api/collection`. The admin ap
 
 - Password-protected `/admin` area with login, logout, and session checks.
 - Add, edit, remove, preview, and save collection entries.
-- Import item details from MyFigureCollection by item number or URL.
+- Import item details and the full official image gallery from MyFigureCollection by item number or URL through the API bridge.
 - Refresh a single MFC image or bulk-refresh every entry with an MFC item number.
 - Download a normalized JSON backup of the current collection.
 - Copy the current entry JSON for manual edits or debugging.
 
 ### Worker and storage
 
-- A single Cloudflare Worker serves static assets, admin pages, and JSON API routes.
+- A Cloudflare Worker serves static assets, admin pages, JSON API routes, and a same-origin MFC image proxy.
 - Cloudflare KV stores the collection under the `collection` key.
 - If KV is missing in local development, the Worker falls back to in-memory storage.
 - The Worker seeds an empty `{ owned: [], wishlist: [] }` collection when KV has no record yet.
@@ -174,9 +174,38 @@ Set real secrets before deploying anything public.
 | `/api/login` | `POST` | No | Validates admin credentials and sets the session cookie. |
 | `/api/logout` | `POST` | Session | Clears admin session cookies. |
 | `/api/auth-check` | `GET` | Session or Basic Auth | Returns `204` when the current admin session is valid. |
-| `/api/mfc` | `GET` | Yes | Looks up a MyFigureCollection item for admin import/refresh workflows. |
+| `/api/mfc` | `GET` | Yes | Looks up a MyFigureCollection item for admin import/refresh workflows. Uses the Python API bridge when configured. |
+| `/api/mfc/image` | `GET`, `HEAD` | No | Streams allowlisted MFC upload images through the same origin and caches successful responses. |
 
 Protected HTML under `/admin` redirects to `/admin/login.html` when the request accepts HTML and no valid session is present.
+
+
+### MFC API bridge
+
+The linked `ssskay/myfigurecollection-api` project is a Python library and local MCP server, not a hosted REST API. It uses `curl_cffi` to make a browser-like TLS handshake; ordinary Cloudflare Worker requests to MFC can still be challenged. This repository includes a small authenticated HTTP adapter at `mfc-api-bridge/server.py` that runs the library on a trusted machine.
+
+For reliable MFC imports and images, run the bridge on a home machine or another connection MFC accepts, and expose it to the Worker through an HTTPS tunnel. The bridge listens on `127.0.0.1:8765` by default and accepts only item lookups and MFC upload image URLs. It caches image bytes locally after their first fetch. Keep its bearer token secret.
+
+Install and start the bridge:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r mfc-api-bridge/requirements.txt
+$env:MFC_API_BRIDGE_TOKEN = "<same long random token configured in Cloudflare>"
+python mfc-api-bridge/server.py
+```
+
+Configure the tunnel to forward an HTTPS hostname to `http://127.0.0.1:8765`. Then set `MFC_API_URL` to that HTTPS origin and `MFC_API_TOKEN` to the same token in the Cloudflare Worker or Pages runtime settings. For local Wrangler development, put these in the ignored `.dev.vars` file:
+
+```text
+MFC_API_URL=http://127.0.0.1:8765
+MFC_API_TOKEN=<same long random token>
+```
+
+The token is sent only from the Worker to the bridge; it is never returned to browser code. If `MFC_API_URL` is not set, the Worker keeps a best-effort direct MFC fetch fallback, which may still be blocked.
+
+This repository's `wrangler.toml` deploys a Worker with static assets. If the project is deployed as Cloudflare Pages, Pages must run the `_worker.js` advanced-mode handler (or equivalent Functions); a static-only Pages deployment will not execute the `/api/*` routes.
 
 ## Configuration
 
@@ -191,6 +220,8 @@ The Worker reads these Cloudflare bindings and secrets:
 | `ADMIN_USERNAME` | Secret | Yes for deploys | Admin username. Defaults to `admin` if omitted. |
 | `ADMIN_PASSWORD` | Secret | Yes for deploys | Admin password. Defaults to `figureadmin` if omitted. |
 | `SESSION_SECRET` | Secret | Recommended | HMAC secret for admin sessions. Falls back to `ADMIN_PASSWORD` when omitted. |
+| `MFC_API_URL` | Variable | Optional | HTTPS origin for the authenticated Python bridge. Use HTTP only for localhost development. |
+| `MFC_API_TOKEN` | Secret | Required with `MFC_API_URL` | Bearer token shared with `MFC_API_BRIDGE_TOKEN` on the bridge host. |
 
 `wrangler.toml` currently defines the Worker name, root asset serving, production and preview KV bindings, and required admin secrets.
 
@@ -266,7 +297,7 @@ Start Wrangler on `http://localhost:8787` in a second terminal. Vite proxies `/a
 
 ### MFC import or image refresh fails
 
-MyFigureCollection may block, change markup, or omit an image. Try again later, keep the existing image URL, or paste an image URL manually in the admin form.
+Check that the bridge process is running, the Cloudflare tunnel reaches it, and `MFC_API_URL` plus the matching `MFC_API_TOKEN` are set in the same Worker/Pages environment. The bridge uses the API package's rate limit and cache. Without a bridge, the Worker falls back to direct edge requests, which MFC may challenge.
 
 ### Login loops or stale sessions
 

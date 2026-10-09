@@ -11,6 +11,7 @@ dist/
 # Source and build tooling
 src/
 scripts/
+mfc-api-bridge/
 tests/
 package.json
 package-lock.json
@@ -24,6 +25,7 @@ eslint.config.js
 .assetsignore
 .env
 .env.*
+.dev.vars
 !.env.example
 
 # Worker entry/runtime source is bundled by Wrangler, not uploaded as a static asset

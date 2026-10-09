@@ -356,8 +356,28 @@ const normalizeImageList = (...values) => {
   return Array.from(new Set(images));
 };
 
-const getEntryPreviewImage = (entry = {}) =>
-  normalizeImageList(entry.images, entry.image)[0] || null;
+const getDisplayImageUrl = (source) => {
+  if (source.startsWith("/api/mfc/image?")) return source;
+  try {
+    const url = new URL(source);
+    if (
+      url.protocol === "https:" &&
+      url.hostname.toLowerCase() === "static.myfigurecollection.net" &&
+      /^\/upload\/(?:items|pictures)\//i.test(url.pathname)
+    ) {
+      url.hash = "";
+      return `/api/mfc/image?url=${encodeURIComponent(url.toString())}`;
+    }
+  } catch {
+    // Keep relative, local, and non-MFC image URLs unchanged.
+  }
+  return source;
+};
+
+const getEntryPreviewImage = (entry = {}) => {
+  const source = normalizeImageList(entry.images, entry.image)[0];
+  return source ? getDisplayImageUrl(source) : null;
+};
 
 const imageListsMatch = (first, second) => {
   const firstImages = normalizeImageList(first);

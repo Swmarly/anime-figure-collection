@@ -83,13 +83,32 @@ export const formatReleaseDate = (value?: string): string => {
 export const getFigureId = (figure: Figure, status: FigureStatus, index: number): string =>
   figure.slug || figure.id || `${status}-${figure.name ?? "figure"}-${index}`;
 
+const getDisplayImageUrl = (source: string): string => {
+  if (source.startsWith("/api/mfc/image?")) return source;
+  try {
+    const url = new URL(source);
+    if (
+      url.protocol === "https:" &&
+      url.hostname.toLowerCase() === "static.myfigurecollection.net" &&
+      /^\/upload\/(?:items|pictures)\//i.test(url.pathname)
+    ) {
+      url.hash = "";
+      return `/api/mfc/image?url=${encodeURIComponent(url.toString())}`;
+    }
+  } catch {
+    // Keep relative, local, and non-MFC image URLs unchanged.
+  }
+  return source;
+};
+
 export const getFigureImages = (figure: Figure): string[] => {
   const images = [
     ...(Array.isArray(figure.images) ? figure.images : []),
     figure.image
   ]
     .map((image) => image?.trim())
-    .filter((image): image is string => Boolean(image));
+    .filter((image): image is string => Boolean(image))
+    .map(getDisplayImageUrl);
 
   return Array.from(new Set(images));
 };

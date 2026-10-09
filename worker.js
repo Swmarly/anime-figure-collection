@@ -993,13 +993,18 @@ const normalizeMfcImageUrl = (value) => {
   return decoded.startsWith("//") ? `https:${decoded}` : decoded;
 };
 
+const isMfcHostname = (hostname) => {
+  const normalized = hostname.toLowerCase();
+  return normalized === "myfigurecollection.net" || normalized.endsWith(".myfigurecollection.net");
+};
+
 const parseMfcUploadImage = (value) => {
   const normalized = normalizeMfcImageUrl(value);
   if (!normalized) return null;
 
   try {
     const url = new URL(normalized);
-    if (!url.hostname.toLowerCase().endsWith("myfigurecollection.net")) {
+    if (!isMfcHostname(url.hostname)) {
       return null;
     }
 
@@ -1032,7 +1037,7 @@ const buildFullSizeMfcImageUrl = (value) => {
   try {
     const url = new URL(normalized);
     const host = url.hostname.toLowerCase();
-    if (!host.endsWith("myfigurecollection.net")) {
+    if (!isMfcHostname(host)) {
       return normalized;
     }
 
@@ -1059,7 +1064,7 @@ const canonicalizeMfcImageUrl = (value) => {
 
   try {
     const url = new URL(normalized);
-    if (url.hostname.toLowerCase().endsWith("myfigurecollection.net")) {
+    if (isMfcHostname(url.hostname)) {
       url.protocol = "https:";
       url.search = "";
       return url.toString();
@@ -1091,6 +1096,45 @@ const mfcImageRequestHeaders = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
   Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
   Referer: "https://myfigurecollection.net/",
+};
+
+const getAllowedMfcImageUrl = (value) => {
+  const normalized = normalizeMfcImageUrl(value);
+  if (!normalized) return null;
+  try {
+    const url = new URL(normalized);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname.toLowerCase() !== "static.myfigurecollection.net" ||
+      url.username ||
+      url.password ||
+      !/^\/upload\/(?:items|pictures)\//i.test(url.pathname)
+    ) return null;
+    url.hash = "";
+    return url;
+  } catch {
+    return null;
+  }
+};
+
+const getMfcApiConfig = (env = {}) => {
+  const rawUrl = typeof env.MFC_API_URL === "string" ? env.MFC_API_URL.trim() : "";
+  if (!rawUrl) return { configured: false };
+  try {
+    const url = new URL(rawUrl);
+    const localHost = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+    if (
+      url.username ||
+      url.password ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && localHost))
+    ) return {
+      configured: true,
+      error: "MFC_API_URL must use HTTPS (HTTP is allowed only for localhost development).",
+    };
+    return { configured: true, baseUrl: url.origin };
+  } catch {
+    return { configured: true, error: "MFC_API_URL is not a valid absolute URL." };
+  }
 };
 
 const isImageResponse = (response) => {
@@ -1546,7 +1590,110 @@ const parseMfcHtml = async (html) => {
   };
 };
 
-const fetchMfcDetails = async (itemId) => {
+const fetchMfcApiDetails = async (itemId, env, config) => {
+  if (!env.MFC_API_TOKEN) {
+    return { error: "The MFC API bridge is configured, but MFC_API_TOKEN is missing.", status: 503 };
+  }
+
+  const itemUrl = new URL("/api/item/" + encodeURIComponent(itemId), config.baseUrl);
+  let response;
+  try {
+    response = await fetch(itemUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + env.MFC_API_TOKEN,
+      },
+      cf: { cacheTtl: 0, cacheEverything: false },
+    });
+  } catch (error) {
+    return {
+      error: "The MFC API bridge could not be reached: " +
+        (error instanceof Error ? error.message : "network error"),
+      status: 503,
+    };
+  }
+
+  if (!response.ok) {
+    let message = "MFC API bridge responded with status " + response.status + ".";
+    try {
+      const payload = await response.json();
+      if (typeof payload?.error === "string") message = payload.error;
+    } catch {
+      // Keep the status-based message when the bridge did not return JSON.
+    }
+    return { error: message, status: response.status === 404 ? 404 : 503 };
+  }
+
+  let item;
+  try {
+    item = await response.json();
+  } catch {
+    return { error: "The MFC API bridge returned invalid JSON.", status: 502 };
+  }
+
+  if (!item || !item.name || Number(item.id) !== Number(itemId)) {
+    return { error: "The MFC API bridge returned an incomplete item.", status: 502 };
+  }
+
+  const names = (entries) =>
+    (Array.isArray(entries) ? entries : [])
+      .map((entry) => (typeof entry?.name === "string" ? entry.name.trim() : ""))
+      .filter(Boolean);
+  const origins = names(item.origins);
+  const characters = names(item.characters);
+  const companies = Array.isArray(item.companies) ? item.companies : [];
+  const manufacturerEntry =
+    companies.find((entry) => /manufacturer|producer/i.test(String(entry?.role || ""))) ||
+    companies[0];
+  const manufacturer = typeof manufacturerEntry?.name === "string"
+    ? manufacturerEntry.name.trim()
+    : null;
+  const images = Array.from(
+    new Set(
+      [
+        item.picture_large,
+        ...(Array.isArray(item.gallery) ? item.gallery : []),
+        item.picture,
+        item.thumbnail,
+      ]
+        .map((value) => getAllowedMfcImageUrl(value)?.toString() || "")
+        .filter(Boolean),
+    ),
+  );
+  const releaseDate = pickOldestReleaseDate(
+    (Array.isArray(item.releases) ? item.releases : []).map((release) => release?.date),
+  );
+  const description =
+    (typeof item.extra?.Description === "string" && item.extra.Description.trim()) ||
+    (typeof item.extra?.Details === "string" && item.extra.Details.trim()) ||
+    null;
+  const tags = Array.from(new Set([...names(item.classifications), ...characters]));
+
+  return {
+    data: {
+      name: item.name,
+      mfcId: Number(item.id),
+      image: images[0] || null,
+      images,
+      description,
+      caption: summarizeText(description),
+      series: origins[0] || characters[0] || null,
+      manufacturer: manufacturer || null,
+      scale: item.scale || null,
+      releaseDate,
+      tags,
+      links: { mfc: "https://myfigurecollection.net/item/" + Number(item.id) },
+    },
+  };
+};
+
+const fetchMfcDetails = async (itemId, env) => {
+  const apiConfig = getMfcApiConfig(env);
+  if (apiConfig.configured) {
+    if (apiConfig.error) return { error: apiConfig.error, status: 503 };
+    return fetchMfcApiDetails(itemId, env, apiConfig);
+  }
+
   const url = `https://myfigurecollection.net/item/${itemId}`;
   const response = await fetch(url, {
     headers: {
@@ -1609,7 +1756,7 @@ const handleMfcRequest = async (request, env) => {
     });
   }
 
-  const result = await fetchMfcDetails(item);
+  const result = await fetchMfcDetails(item, env);
   if (result.error) {
     return new Response(JSON.stringify({ error: result.error }), {
       status: result.status || 502,
@@ -1629,6 +1776,104 @@ const handleMfcRequest = async (request, env) => {
   });
 };
 
+
+const handleMfcImageRequest = async (request, env, ctx) => {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+  }
+
+  const requestUrl = new URL(request.url);
+  const imageUrl = getAllowedMfcImageUrl(requestUrl.searchParams.get("url"));
+  if (!imageUrl) {
+    return new Response("A valid MyFigureCollection image URL is required.", {
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+
+  const cacheKey = new Request(
+    new URL("/api/mfc/image?url=" + encodeURIComponent(imageUrl.toString()), requestUrl.origin).toString(),
+  );
+  const edgeCache = globalThis.caches?.default;
+  if (edgeCache) {
+    try {
+      const cached = await edgeCache.match(cacheKey);
+      if (cached) {
+        return request.method === "HEAD"
+          ? new Response(null, { status: cached.status, headers: cached.headers })
+          : cached;
+      }
+    } catch {
+      // A cache miss must not prevent image delivery.
+    }
+  }
+
+  let upstream;
+  const apiConfig = getMfcApiConfig(env);
+  if (apiConfig.configured) {
+    if (apiConfig.error || !env.MFC_API_TOKEN) {
+      return new Response(apiConfig.error || "MFC_API_TOKEN is not configured.", {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    const bridgeUrl = new URL("/api/image", apiConfig.baseUrl);
+    bridgeUrl.searchParams.set("url", imageUrl.toString());
+    try {
+      upstream = await fetch(bridgeUrl.toString(), {
+        headers: {
+          Accept: "image/*",
+          Authorization: "Bearer " + env.MFC_API_TOKEN,
+        },
+        cf: { cacheTtl: 86400, cacheEverything: true },
+      });
+    } catch {
+      return new Response("The MFC image bridge is unavailable.", { status: 503 });
+    }
+  } else {
+    try {
+      upstream = await fetch(imageUrl.toString(), {
+        headers: mfcImageRequestHeaders,
+        redirect: "manual",
+        cf: { cacheTtl: 86400, cacheEverything: true },
+      });
+    } catch {
+      return new Response("MyFigureCollection image could not be fetched.", { status: 502 });
+    }
+  }
+
+  const contentType = upstream.headers.get("Content-Type") || "";
+  if (!upstream.ok || !contentType.toLowerCase().startsWith("image/")) {
+    return new Response("MyFigureCollection did not return an image.", {
+      status: 502,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+
+  const headers = new Headers({
+    "Content-Type": contentType,
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "X-Content-Type-Options": "nosniff",
+  });
+  const etag = upstream.headers.get("ETag");
+  if (etag) headers.set("ETag", etag);
+  const imageResponse = new Response(request.method === "HEAD" ? null : upstream.body, {
+    status: 200,
+    headers,
+  });
+
+  if (edgeCache) {
+    try {
+      const put = edgeCache.put(cacheKey, imageResponse.clone());
+      if (ctx?.waitUntil) ctx.waitUntil(put.catch(() => undefined));
+      else await put;
+    } catch {
+      // A cache write is optional; the image response is already available.
+    }
+  }
+
+  return imageResponse;
+};
 
 const buildForbiddenOriginResponse = () =>
   new Response(JSON.stringify({ error: "Cross-origin state-changing requests are not allowed." }), {
@@ -1861,7 +2106,11 @@ export default {
       });
     }
 
-    if (pathname.startsWith("/api/mfc")) {
+    if (pathname === "/api/mfc/image") {
+      return handleMfcImageRequest(request, env, ctx);
+    }
+
+    if (pathname === "/api/mfc") {
       const auth = await ensureAuthorized(request, env);
       if (auth) return auth;
       if (request.method !== "GET") {

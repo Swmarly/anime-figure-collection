@@ -199,3 +199,94 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+
+  
+// Configured bridge uses the linked Python API payload and keeps its token server-side.
+{
+  globalThis.fetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    assert.equal(url, 'https://bridge.example/api/item/1685257');
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer bridge-secret');
+    return new Response(JSON.stringify({
+      id: 1685257,
+      name: 'Rem',
+      picture_large: 'https://static.myfigurecollection.net/upload/items/2/rem.jpg',
+      gallery: ['https://static.myfigurecollection.net/upload/pictures/2025/07/18/rem-alt.jpeg'],
+      picture: 'https://static.myfigurecollection.net/upload/items/1/rem.jpg',
+      thumbnail: null,
+      origins: [{ name: 'Re:Zero Starting Life' }],
+      characters: [{ name: 'Rem' }],
+      companies: [{ name: 'Good Smile Company', role: 'Manufacturer' }],
+      classifications: [{ name: 'Scale Figure' }],
+      releases: [{ date: '12/2023' }, { date: '02/2024' }],
+      scale: '1/7',
+      extra: {},
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const authHeader = 'Basic ' + Buffer.from('admin:figureadmin').toString('base64');
+  const response = await worker.default.fetch(
+    new Request('https://example.com/api/mfc?item=1685257', { headers: { Authorization: authHeader } }),
+    {},
+    { MFC_API_URL: 'https://bridge.example', MFC_API_TOKEN: 'bridge-secret' },
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.name, 'Rem');
+  assert.equal(payload.series, 'Re:Zero Starting Life');
+  assert.equal(payload.manufacturer, 'Good Smile Company');
+  assert.equal(payload.scale, '1/7');
+  assert.equal(payload.releaseDate, '2023-12');
+  assert.equal(payload.mfcId, 1685257);
+  assert.deepEqual(payload.images, [
+    'https://static.myfigurecollection.net/upload/items/2/rem.jpg',
+    'https://static.myfigurecollection.net/upload/pictures/2025/07/18/rem-alt.jpeg',
+    'https://static.myfigurecollection.net/upload/items/1/rem.jpg',
+  ]);
+}
+
+// The public image route needs no admin session and uses the authenticated bridge.
+{
+  const imageBytes = new Uint8Array([255, 216, 255, 217]);
+  let fetchCount = 0;
+  globalThis.fetch = async (input, init = {}) => {
+    fetchCount += 1;
+    const url = typeof input === 'string' ? input : input.url;
+    assert.equal(
+      url,
+      'https://bridge.example/api/image?url=' +
+        encodeURIComponent('https://static.myfigurecollection.net/upload/items/2/rem.jpg'),
+    );
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer bridge-secret');
+    return new Response(imageBytes, { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
+  };
+  const proxyUrl =
+    'https://example.com/api/mfc/image?url=' +
+    encodeURIComponent('https://static.myfigurecollection.net/upload/items/2/rem.jpg');
+  const response = await worker.default.fetch(
+    new Request(proxyUrl),
+    { MFC_API_URL: 'https://bridge.example', MFC_API_TOKEN: 'bridge-secret' },
+    {},
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Content-Type'), 'image/jpeg');
+  assert.match(response.headers.get('Cache-Control'), /immutable/);
+  assert.deepEqual(Array.from(new Uint8Array(await response.arrayBuffer())), Array.from(imageBytes));
+  assert.equal(fetchCount, 1);
+}
+
+// Image proxy rejects arbitrary hosts before making an upstream request.
+{
+  globalThis.fetch = async () => {
+    throw new Error('An invalid image URL must not be fetched');
+  };
+  const response = await worker.default.fetch(
+    new Request('https://example.com/api/mfc/image?url=' + encodeURIComponent('https://evil.example/image.jpg')),
+    {},
+    {},
+  );
+  assert.equal(response.status, 400);
+}
+
+globalThis.fetch = originalFetch;
+console.log('MFC bridge and image proxy tests passed');
